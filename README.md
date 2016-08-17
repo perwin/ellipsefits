@@ -11,45 +11,53 @@ datautils.py to somewhere on your Python path. (You can also copy doellipse.cl
 to somewhere on your IRAF script path if you think it might be useful for generating
 ellipse fits.)
 
-(Eventually this may turn into an Astropy affiliated package, but the setup for
-that is incomplete.)
+Eventually this will, I hope, turn into an Astropy affiliated package, but the setup for
+that is very incomplete at this point.
 
 
 ## Examples of use:
 
-First, generate ellipse-fit output using the IRAF task ellipse, then convert
-the output to either FITS table format or text-file format using the
-tcopy or tdump tasks. The included IRAF script doellipse.cl will automatically
-do both. E.g., to fit an object in the image myimage.fits with initial guesses
-for the center of (x,y) = (512.5, 510.3), initial semi-major axis of 100 pixels,
-initial ellipse position angle = 45 degrees and ellipticity = 0.3, and
-maximum semi-major axis = 300 pixels:
+First, generate ellipse-fit output using the IRAF task ellipse (part of
+the STSDAS package, in stsdas.analysis.isophote), then convert the
+output to either FITS table format or text-file format using the tcopy
+or tdump tasks (part of the TABLES package). The included IRAF script
+doellipse.cl will automatically do both. 
 
-    cl> doellipse myimage.fits el_myimage 512.5 510.3 100 45 0.5 300
+E.g., to fit an object in the image n5831rss.fit with initial guesses
+for the center of (x,y) = (1579.6, 897.5), initial semi-major axis of 30
+pixels, initial ellipse position angle = 50 degrees and ellipticity =
+0.2, and maximum semi-major axis = 220 pixels:
 
-This will generate three output files: el\_myimage.tab (STSDAS TABLES format),
-el\_myimage\_tdump.txt (text table), and el\_myimage.fits (FITS table).
+    cl> doellipse n5831rss.fit el_n5831rss 1579.6 897.5 30 50 0.2 220
+
+This will generate three output files: el\_n5831rss.tab (STSDAS TABLES format),
+el\_myimage\_n5831rss.txt (text table), and el\_n5831rss.fits (FITS table).
 
 Then, in Python:
 
     >>> import ellipsefit
-    >>> efit = ellipsefit.ReadEllipse("/path/to/el_myimage.fits")
+    >>> efit = ellipsefit.ReadEllipse("/path/to/el_n5831rss.fits")
     >>> ellipsefit.PlotEllPA(efit)
 
-The same, but specifying the pixel scale of the image (here, 0.396
-arcsec/pixel) and its orientation on the sky, so that plots will display
-semi-major axis in arc seconds and position angle on the sky; the plotting
-command specifies log spacing on the x-axis, a restricted x-axis range,
-and a restricted y-axis range for the position-angle plot:
+<img src="extra/n5831_efit_raw.png" width=70%>
 
-    >>> efit = ellipsefit.ReadEllipse("/path/to/el_myimage.fits", pix=0.396, telPA=85.7)
-    >>> ellipsefit.PlotEllPA(efit, xlog=True, xrange=[10,100], parange=[10,30])
+The same, but now also specifying the pixel scale of the image (here, 0.396
+arcsec/pixel) and its orientation on the sky, so that plots will display
+semi-major axis in arc seconds and correct position angle on the sky. The plotting
+command now specifies log spacing on the x-axis, a restricted x-axis range,
+an expanded y-axis range for the ellipticity, a restricted y-axis range for 
+the position-angle plot, and merges the separate PA and ellipticity plots:
+
+    >>> efit = ellipsefit.ReadEllipse("/path/to/el_n5831rss.fits", pix=0.396, telPA=89.99)
+    >>> ellipsefit.PlotEllPA(efit, xlog=True, xrange=[1,100], erange=[0,0.35], parange=[100,155], merge=True)
+
+<img src="extra/n5831_efit_nice.png" width=75%>
 
 
 
 ## Requirements:
 This should work under any recent version of Python 3; it also works
-in Python 2.7.
+in Python 2.7 (and probably 2.6 as well, though I haven't tested that in a while).
 
 Required Python libraries:
 
