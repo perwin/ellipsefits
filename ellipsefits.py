@@ -38,6 +38,56 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+# For reference, here are the column descriptors in a tdump output of an ellipse fit:
+# SMA              R           %7.2f  pixel
+# INTENS           R          %10.3g  ""
+# INT_ERR          R          %10.3g  ""
+# PIX_VAR          R           %9.3g  ""
+# RMS              R           %9.3g  ""
+# ELLIP            R           %6.4f  ""
+# ELLIP_ERR        R           %6.4f  ""
+# PA               R           %6.2f  degrees
+# PA_ERR           R           %6.2f  degrees
+# X0               R           %7.2f  pixel
+# X0_ERR           R           %6.2f  pixel
+# Y0               R           %7.2f  pixel
+# Y0_ERR           R           %6.2f  pixel
+# GRAD             R           %8.3g  ""
+# GRAD_ERR         R           %6.3g  ""
+# GRAD_R_ERR       R           %6.3g  ""
+# RSMA             R           %7.5f  pixel**1/4
+# MAG              R           %7.3g  ""
+# MAG_LERR         R           %7.3g  ""
+# MAG_UERR         R           %7.3g  ""
+# TFLUX_E          R          %12.5g  ""
+# TFLUX_C          R          %12.5g  ""
+# TMAG_E           R           %7.3g  ""
+# TMAG_C           R           %7.3g  ""
+# NPIX_E           I             %6d  ""
+# NPIX_C           I             %6d  ""
+# A3               R           %9.3g  ""
+# A3_ERR           R           %7.3g  ""
+# B3               R           %9.3g  ""
+# B3_ERR           R           %7.3g  ""
+# A4               R           %9.3g  ""
+# A4_ERR           R           %7.3g  ""
+# B4               R           %9.3g  ""
+# B4_ERR           R           %7.3g  ""
+# NDATA            I             %5d  ""
+# NFLAG            I             %5d  ""
+# NITER            I             %3d  ""
+# STOP             I             %2d  ""
+# A_BIG            R           %9.3g  ""
+# SAREA            R           %5.1f  pixel
+# [[ extra stuff if extra harmonics were requested: ]]
+# AI5              R           %9.3g  ""
+# AI5_ERR          R           %9.3g  ""
+# BI5              R           %9.3g  ""
+# BI5_ERR          R           %9.3g  ""
+# [[ etc. ]]
+# IMAGE    t ./u8802rss.fit
+
+
 import math, copy, os
 
 import numpy as np
@@ -97,8 +147,20 @@ NiceLogFormatter = ticker.FuncFormatter(niceLogFunc)
 
 def MakeNiceLogAxes( whichAxis="xy", axisObj=None ):
 	"""
-	Makes one or more axes of a figure display tick labels using non-scientific
+	Makes one or more axes of a plot display tick labels using non-scientific
 	notation (e.g., "0.01" instead of "10^{-2}")
+
+	Parameters
+    ----------
+    whichAxis : {"x", "y", "xy"}
+    	Specifies which axis to convert
+    
+    axisObjs : matplotlib.axes.Axes or subclass, optional
+    	an Axes object to convert the tick-label display for
+    	
+    Returns
+    -------
+    None
 	"""
 	
 	if axisObj is None:
@@ -136,6 +198,7 @@ def EllipseCircum( a, b ):
     ----------
     a : float
     	semi-major axis of ellipse
+    
     b : float
     	semi-minor axis of ellipse
     
@@ -160,10 +223,13 @@ def EllipseR( a, ellipticity, pa, referencePA ):
     ----------
     a : float
     	semi-major axis of ellipse
+    
     ellipticity : float
     	ellipse ellipticity (1 - b/a)
+    
     pa : float
     	position angle of ellipse major axis [degrees]
+    
     referencePA: float
     	position angle of vector [degrees]
     
@@ -195,11 +261,14 @@ def CorrectPosAngle( posAngle, telescopePA=None, flipFlag=False, outputNP=False 
     ----------
     posAngle : float or sequence
     	position angle [degrees] in IRAF ellipse format (-90 < PA < +90)
+    
     telescopePA : float or None, optional
     	angle from N to the image +y axis (measured in degrees E of N).
 		If supplied, angles will be converted to degrees E of N.
+	
     flipFlag : bool, optional
     	If True, angles are reflected about image y-axis
+    
     outputNP: bool, optional
     	If True and input is a sequence, output will be numpy.ndarray
     
@@ -442,19 +511,26 @@ def ReadEllipse( filename, pix=None, dataFrame=True, correctPA=True,
     filename : str
     	path to table file containing output of IRAF ellipse (converted from STSDAS
     	table form)
+    
     pix : float or None, optional
     	scale for pixels (e.g., arc seconds per pixel)
+    
     dataFrame : bool, optional
     	if True [default], output is datautils.ListDataFrame; otherwise, output is dict
+    
     correctPA : bool, optional
     	if True [default], position angles are corrected to standard astronomical
     	form
+    
     telPA : float or None, optional
     	orientation of image (position of image +y axis on sky, in degrees E of N)
+    
     flip : bool, optional
     	if True, position angles are flipped about the y-axis
+    
     ZP : float or None, optional
     	effective zero point for converting counts/pixel into mag arcsec^-2
+    
     smaUnits : str or None, optional
     	label describing units for semi-major axis (after applying `pix` conversion)
     
@@ -616,6 +692,27 @@ def ReplaceColumnsWithConstants( efit, colNameList, colValueList, smarange=None 
 	Optionally, the range in semi-major axis for which values are replaced can be 
 	specified via smarange (only semi-major axis values >= smarange[0] and 
 	<= smarange[1] will be affectd).
+
+	Parameters
+    ----------
+    efit : dict or datautils.ListDataFrame[?]
+    	the ellipse-fit object to be updated
+    
+    colNameList : list or tuple of str
+    	list of column names to be updated
+
+    colValueList : list or tuple of float [or int or str?]
+    	list of values to be inserted into columns specified by names in colNameList
+    
+    smarange : list, tuple, or numpy.ndarray of float
+    	2-element list of lower and upper semi-major axis limits; values in the
+    	specified columns outside this range will be left unchanged, values within
+    	this range will be replaced by the value specified in colValueList
+    	
+    Returns
+    -------
+    None
+
 	"""
 	
 	if "sma" in efit.keys():
@@ -716,7 +813,7 @@ def MergeEllipseFits( efit1, efit2, transitionRadius ):
 
 
 def IntensityFromRadius( ellipseFit, radius, ZP=None ):
-	"""Returns or estimates ellipse-fit intensity at a given radius.
+	"""Returns or estimates ellipse-fit intensity at a given "radius" [semi-major axis].
 	
 	Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
 	user-specified "radius" (semi-major axis), this function extracts corresponding 
@@ -731,7 +828,8 @@ def IntensityFromRadius( ellipseFit, radius, ZP=None ):
 	Parameters
     ----------
     ellipseFit : dict or datautils.ListDataFrame object
-    radius : float or iterable
+    
+    radius : float or sequence of float
     	radius (or list, tuple, or numpy.ndarray) specifying where to estimate intensity
     
     Returns
@@ -765,7 +863,7 @@ def IntensityFromRadius( ellipseFit, radius, ZP=None ):
 
 
 def ValueFromRadius( ellipseFit, radius, value="pa" ):
-	"""Returns or estimates ellipse-fit value at a given radius.
+	"""Returns or estimates ellipse-fit value at a given "radius" [semi-major axis].
 	
 	Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
 	user-specified "radius" (semi-major axis), this function extracts the
@@ -773,6 +871,20 @@ def ValueFromRadius( ellipseFit, radius, value="pa" ):
 	(using spline interpolation to get the value if the radius is not explicitly 
 	in the ellipse-fit object).
 
+	Parameters
+    ----------
+    ellipseFit : dict or datautils.ListDataFrame object
+    
+    radius : float or sequence of float
+	    radius (or list, tuple, or numpy.ndarray) specifying where to estimate value
+	
+	value : str
+		column name within ellipseFit for which estimated value is desired
+    
+    Returns
+    -------
+    result : float or numpy.ndarray
+    	Returns float if `radius` was float, numpy.ndarray otherwise
 		value = string specifying which value to return (e.g., "ellip", "pa", etc.)
 	"""
 	
@@ -799,11 +911,28 @@ def ValueFromRadius( ellipseFit, radius, value="pa" ):
 
 def GetIntensityReq( ellipseFit, mode="iraf" ):
 	"""
+	Returns tuple of (r_eq, intensities) from an ellipse-fit object.
+	
 	Given user-specified ellipse fit (defaults to iraf format, but mode="bender"
 	can be used to indicate a Bender/Saglia format), return tuple of equivalent radius
 	(r_eq = sqrt(a*b)) vector and intensities/surface-brightness vector (for iraf-
 	format ellipse fits, we return the intensities; for Bender/Saglia format, we
 	return the "surface brightness").
+
+	Parameters
+    ----------
+    ellipseFit : dict or datautils.ListDataFrame object
+    
+    mode : {"iraf", "bender"}, optional
+	    Specifies the origin and format of the ellipse fit [default = "iraf"]
+	
+    Returns
+    -------
+    (req, i_or_mu) : tuple of (numpy.ndarray, numpy.ndarry)
+    	req is array of r_eq values corresponding to semi-major axis values in
+    	input;
+		i_or_mu is array of corresponding intensities [if input was IRAF format] 
+		or surface-brightness values [if input was Bender format]
 	"""
 	
 	if mode == "iraf":
@@ -826,6 +955,27 @@ def GetStartParams( ellipseFit, a0=10, printCommand=False, useExactSma=False ):
 	"""
 	Extract the necessary start parameters for running doellipse: x0, y0, 
 	pa0, ell0 given the specified semi-major axis (default = 10 pixels).
+
+	Parameters
+    ----------
+    ellipseFit : dict or datautils.ListDataFrame
+
+	a0 : float, optional
+		optional starting semi-major axis [default = 10.0]
+	
+	printCommand: bool, optional
+		specifies that a sample command for the doellipse script should be
+		printed [default = False]
+	
+	useExactSma : bool, optional
+    	
+    Returns
+    -------
+    (x0,y0,a00,pa0,ell0) : tuple of (float, float, float, float, float)
+    	tuple of starting parameters for running an ellipse fit, consisting of:
+    	x0, y0 = initial guess for ellipse center in pixel coordinates
+    	a00, pa0, ell0 = initial semi-major axis
+    	pa0, ell0 = initial guesses for ellipse position angle and ellipticity
 	"""
 	
 	doellipseTemplate = "doellipse xxx el_xxx {0} {1} {2} {3} {4}"
@@ -887,12 +1037,30 @@ def WriteProfileFromDict( dataDict, outputFilename ):
 
 
 
-def NearestIndex( vector, value, noPrint=False, debug=0 ):
-	"""Returns nearest two indices to a specified value in a vector.
+def NearestIndex( vector, value, noPrint=False, debug=False ):
+	"""Returns nearest two indices which bracket a specified value in a vector.
 	
-	Given an input list or numpy 1-D array, which is asumed to be 
-	monotonically increasing or decreasing, find the indices of the two points 
-	with values closest	to parameter 'value'."""
+	Given an input list or numpy 1-D array, which is asumed to be monotonically 
+	increasing or decreasing, find the indices of the two points with values closest
+	to parameter 'value'.
+
+	Parameters
+    ----------
+    vector : sequence (list, tuple, numpy.ndarray) of float
+
+	value : float
+	
+	noPrint : bool, optional
+		if True, suppresses printout [default = False]
+	
+	debug : bool, optional
+		if True, prints extra debugging info
+    	
+    Returns
+    -------
+    (i1, i2) : tuple of (int, int)
+		tuple of indices for vector which bracket input value
+	"""
 	
 	npts = len(vector)
 	
@@ -913,10 +1081,12 @@ def NearestIndex( vector, value, noPrint=False, debug=0 ):
 		Sign = -1
 	i1 = i2 = 0
 	diff = Sign*(value - vector[0])
-	if debug: print(diff)
+	if debug: 
+		print(diff)
 	for i in range(1, npts):
 		newdiff = Sign*(value - vector[i])
-		if debug: print(i, newdiff)
+		if debug: 
+			print(i, newdiff)
 		if (newdiff > 0) and (newdiff <= diff):
 			diff = newdiff
 			i1 = i
@@ -932,7 +1102,10 @@ def NearestIndex( vector, value, noPrint=False, debug=0 ):
 
 def WeightedFlux( dataDict ):
 	"""Given an input ellipse-fit stored in a dictionary, compute the approximate
-	total flux."""
+	total flux.
+	
+	
+	"""
 	
 	sma = dataDict["sma"]
 	I = dataDict["intens"]
@@ -987,37 +1160,81 @@ def EquivRadius( dataDict ):
 # PLOTTING FUNCTIONS:
 
 def PlotValsErrors( efit, valName, smaName='sma', errSuffix="_err", xlog=False, 
-					ylog=False, xmark=None, xmarkColor=None, flipPA=None, plotColor="k", 
-					lw=1, ymark=None, ymarkColor='k', smaScale=1.0, plotErrors=True ):
-	"""Plot a parameter from an ellipse-fit object vs semi-major axis, with errorbars.
+					ylog=False, xmark=None, xmarkColor=None, ymark=None, ymarkColor='k', 
+					plotColor="k", lw=1, smaScale=1.0, flipPA=None, plotErrors=True ):
+	"""Plot a parameter from an ellipse-fit object vs semi-major axis, with errorbars,
+	in a single plot.
 	
 	Plots a parameter from an ellipse fit, along with its errors, against
 	semi-major axis or similar value (default assumes that semi-major axis is 
 	accessed via efit['sma'], but user can specify a different key -- e.g., "req" --
-	via smaName).
+	via smaName). Intended to be called from within another ellipsefits function
+	(e.g., PlotEllPA).
+
+	Parameters
+    ----------
+	efit : ellipse-fit dict or datautils.ListDataFrame object
 	
-		efit: ellipse-fit dict or datautils.ListDataFrame object
-		valName: string containing name of parameter (e.g., "ellip", "pa"); error is
-	assumed to be referenced by valame + errSuffix 
-		smaName: name for radius values (for x-axis; e.g., "sma", "req")
-		errSuffix: string specifying how error values are identified (i.e., errors
-	for valName are assumed to be identified by valName + errSuffix)
-		xlog: if True, then the semi-major axis is plotted in log space
-		flipPA: rearrange PA values so that PA > flipPA are set negative; PA values 
-	below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
-	If flipPA < 0, then values of PA < abs(flipPA) have 180 added to them.
-		xmark: single number or list of numbers specifying semi-major-axis values
-	at which vertical dashed lines will be drawn.
-		xmarkColor: optional string defining single color in matplotlib style *or* 
-	a list of such strings, used to specify colors for xmark. If nothing is supplied 
-	for this, it will default to plotColor [which itself defaults to 'k']
-		lw: linewidth specification for plot
-		ymark: single number or list of numbers; horizontal dashed lines will be drawn 
-	for the corresponding values.
-		smaScale: conversion from native semi-major-axis units of the ellipse-fit
-	object (e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
-	for the x-axis.
-		plotErrors: if True [default], then errorbars are plotted.
+	valName : str
+		specifies name of parameter (e.g., "ellip", "pa"); error is
+		assumed to be referenced by valName + errSuffix 
+	
+	smaName : str, optional
+		name for radius values (for x-axis; e.g., "sma", "req") [default = "sma"]
+	
+	errSuffix : str, optional
+		string specifying how error values are identified (i.e., errors
+		for valName are assumed to be identified by valName + errSuffix)
+		[default = "_err"]
+	
+	xlog : bool, optional
+		if True, then the semi-major axis is plotted in log space [default = False]
+	
+	ylog : bool, optional
+		if True, then the y axis is plotted in log space [default = False]
+	
+	xmark : float, sequence of float, or None, optional
+		Single number or list of numbers specifying semi-major-axis values
+		at which vertical dashed lines will be drawn (using plt.axvline).
+
+	xmarkColor : str, sequence of str, or None, optional
+		string defining single color in matplotlib style *or* a list/etc. of such 
+		strings, used to specify colors for drawling lines specified by xmark. 
+		If None, the color will default to plotColor [which itself defaults to 'k']
+
+	ymark : float, sequence of float, or None, optional
+		single number or list of numbers; horizontal dashed lines will be drawn 
+		for the corresponding values (using plt.axhline).
+	
+	ymarkColor : str, sequence of str, or None, optional
+		As for xmarkColor, but specifying color(s) for ymark line(s).
+
+	plotColor : str or None, optional
+		matplotlib color specification for the data points, lines connecting them,
+		and errorbars [default = 'k']
+	
+	lw : float or None, optional
+		matplotlib linewidth specification for plotting the lines connecting
+		individual data points
+
+	smaScale : float or None, optional
+		conversion from the native semi-major-axis units of the ellipse-fit object 
+		(e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
+		for the x-axis.
+
+	flipPA : float or None, optional
+		If set, rearranges y-axis values so that y > flipPA are set negative; y values 
+		below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
+		If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
+		only for cases of plotting position angles.
+		[default = None]
+	
+	plotErrors : bool, optional
+		if True [default], then errorbars are plotted.
+
+    Returns
+    -------
+    None
 	"""
 	
 	valErrName = valName + errSuffix
@@ -1121,11 +1338,11 @@ def PlotHarmonicMomentErrors( efit, m, smaName='sma', errSuffix="_err", xlog=Fal
 				plt.axhline(y, ls="--", color=ymarkColor)
 
 
-def PlotEllPA( efit, xlog=False, flipPA=None, xrange=None, parange=None, erange=None,
+def PlotEllPA( efit, xlog=False, xrange=None, parange=None, erange=None,
 				xmark=None, xmarkColor=None, pamark=None, ellmark=None, 
 				merge=False, maintitle=None, xtitle=None, 
 				plotColorList=['k','r','g','b'], lwList=[1,1,1,1],
-				labelSize=12, removeExtra=False, smaScale=1.0,
+				labelSize=12, removeExtra=False, flipPA=None, smaScale=1.0,
 				plotErrors=True, plotq=False, useReq=False, noErase=False ):
 	"""Plot position angle and ellipticity (or axis ratio) as function of semi-major axis
 	(or r_eq) for one or more ellipse fits
@@ -1138,39 +1355,98 @@ def PlotEllPA( efit, xlog=False, flipPA=None, xrange=None, parange=None, erange=
 		efit can be a single ellipse-fit object [generated by ReadEllipse] or a list 
 	of such objects.
 	
-		xlog: if True, then the semi-major axis is plotted in log space
-		flipPA: rearrange PA values so that PA > flipPA are set negative; PA values 
-	below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
-	If flipPA < 0, then values of PA < abs(flipPA) have 180 added to them.
-		parange, erange: 2-element lists with lower and upper values for the
-	plots of position angle and ellipticity/axis-ratio, respectively
-		xmark: single number or list of numbers specifying semi-major-axis values
-	at which vertical dashed lines will be drawn.
-		xmarkColor: optional string defining single color in matplotlib style *or* 
-	a list of such strings, used to specify colors for xmark. If nothing is supplied 
-	for this, it will default to plotColor [which itself defaults to 'k']
-		pamark, ellmark: single number or list of numbers; horizontal dashed lines
-	will be drawn for the corresponding values of PA or ellipticity/axis-ratio.
-		merge: if True, the upper (PA) and lower (ellipticity/axis-ratio) plots
-	will be merged so as to leave no vertical gap.
-		maintitle: optional title for the entire plot
-		xtitle: optional alternate label for x-axis [default = units specified in the
-	first ellipse-fit object]
+	Parameters
+    ----------
+	efit : ellipse-fit object or list of same
+	
+	xlog : bool, optional
+		if True, then the semi-major axis is plotted in log space [default = False]
+	
+	xrange : 2-element sequence of float
+		lower and upper limits for plot range of x-axis (semi-major axis)
 
-		plotColorList: optional list of color specifications to use when plotting
-	a list of ellipse-fit objects.
-		lwList: optional list of linewidth specifications to use when plotting a list
-	of ellipse-fit objects.
-		labelSize: font size fopr x- and y-axis labels (in points)
-		removeExtra: xxx
-		smaScale: conversion from native semi-major-axis units of the ellipse-fit
-	object (e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
-	for the x-axis.
-		plotErrors: if True [default], error bars are drawn for the PA and ellipticity/axis-ratio
-	values
-		plotq: plot axis ratio (q = b/a) instead of ellipticity
-		useReq: plot versus equivalent radius (R_eq = sqrt(ab)) instead of semi-major axis
-		noErase: if True, then no clf() command is issued prior to making the plot
+	parange : 2-element sequence of float
+		lower and upper limits for plot range of y-axis for position-angle subplot
+	
+	erange : 2-element sequence of float
+		lower and upper limits for plot range of y-axis for ellipticity subplot
+	
+	xmark : float, sequence of float, or None, optional
+		Single number or list of numbers specifying semi-major-axis values
+		at which vertical dashed lines will be drawn (using plt.axvline).
+
+	xmarkColor : str, sequence of str, or None, optional
+		string defining single color in matplotlib style *or* a list/etc. of such 
+		strings, used to specify colors for drawling lines specified by xmark. 
+		If None, the color will default to plotColor [which itself defaults to 'k']
+
+	pamark : float, sequence of float, or None, optional
+		single number or list of numbers specifying position angles; horizontal 
+		dashed lines will be drawn for the specified values (using plt.axhline)
+		in the PA subplot.
+
+	pamark : float, sequence of float, or None, optional
+		single number or list of numbers specifying ellipticities; horizontal 
+		dashed lines will be drawn for the specified values (using plt.axhline)
+		in the ellipticity subplot.
+	
+	merge : bool, optional
+		Merges PA and ellipticity subplots vertically, so they share a common x-axis
+		with x-axis labels only at the bottom of the ellipticity subplot.
+		[default = False]
+	
+	mainTitle : str or None, optional
+		Optional title for the combined plot (will appear on top of PA subplot).
+		
+	xTitle : str or None, optional
+		Alternate x-axis label [default = None, which produces a default x-axis label
+		of "Semi-major axis [<unit_name>]", where <unit_name> is the unit associated
+		with the semi-major-axis column of the first ellipse-fit object.
+		
+	plotColorList : sequence of str, optional
+		matplotlib color specifications for the ellipse-fit objects, lines connecting
+		them, and errorbars, with ordering same as in efit.
+	
+	lwList : sequence of float, optional
+		matplotlib linewidth specification for plotting the lines connecting
+		individual data points, with same ordering as in efit
+
+	labelSize : float, optional
+		matplotlib point size for axis labels [default = 12]
+	
+	removeExtra : bool, optional
+		XXX
+		
+	smaScale : float or None, optional
+		conversion from the native semi-major-axis units of the ellipse-fit object 
+		(e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
+		for the x-axis.
+
+	flipPA : float or None, optional
+		If set, rearranges y-axis values so that y > flipPA are set negative; y values 
+		below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
+		If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
+		only for cases of plotting position angles.
+		[default = None]
+	
+	plotErrors : bool, optional
+		if True [default], then errorbars are plotted.
+
+	plotq : bool, optional
+		if True, then axis ratio q (= b/a) is plotted instead of ellipticity in the
+		ellipticity plot [default = False]
+	
+	useReq : bool, optional
+		if True, then PA and ellipticity are plotted against r_eq [sqrt(a*b)] instead
+		of semi-major axis. [default = False]
+	
+	noErase : bool, optional
+		if True, then a plot.clf() command is *not* issued prior to making the plot.
+		[default = False]
+	
+    Returns
+    -------
+    None
 	"""
 	
 	if isinstance(efit, list):
@@ -1186,7 +1462,7 @@ def PlotEllPA( efit, xlog=False, flipPA=None, xrange=None, parange=None, erange=
 	else:
 		yLabelEllip = r"Ellipticity = $1 - b/a$"
 		yValEllip = "ellip"
-	# are we plotting versus semi-major axis or R_eq?
+	# are we plotting versus semi-major axis or r_eq?
 	if useReq is True:
 		xLabelBase = r"Equivalent radius $r_{\rm eq}$ ["
 		xValName = "req"
