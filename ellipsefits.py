@@ -3,7 +3,7 @@
 # output by the tprint or tdump tasks, or into FITS table form by
 # the tcopy task.
 # 
-# Also include functions for plotting, using matplotlib functions.
+# Also includes functions for plotting, using matplotlib functions.
 
 # In addition, we include some functions for converting between IRAF
 # ellipse-fit output and the (shortened) output of the Bender ellipse-fitting
@@ -87,16 +87,19 @@
 # [[ etc. ]]
 # IMAGE    t ./u8802rss.fit
 
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import math, copy, os
 
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-import matplotlib as mpl
 from astropy.io import fits
 from astropy import cosmology
 from scipy import interpolate
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import matplotlib as mpl
 from matplotlib.patches import Ellipse
 
 import datautils as du
@@ -109,32 +112,32 @@ COLUMNS_BENDER = "#   a        b         sb     eps  deps     pa      dpa      a
 OUTPUT_FMT_BENDER_ALL = "%8.4f %8.4f  %8.4f  %.3f %.3f  %6.2f  %6.2f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f %8.3f\n"
 
 BENDER_COLUMNS_AS_IRAF = ['sma', 'sb', 'ellip', 'ellip_err', 'pa', 'pa_err', 'b4', 'b6', 'b8',
-							'b10', 'b12']
+                            'b10', 'b12']
 
 # the following is the set of standard IRAF ellipse-fit columns, *including* some
 # optional column names corresponding to Bender-style ellipse fits
 # (for use by ConvertBenderToIraf)
 IRAF_COLNAMES_B = ['sma', 'intens', 'int_err', 'pix_var', 'rms', 'ellip', 'ellip_err',
-	'pa', 'pa_err', 'x0', 'x0_err', 'y0', 'y0_err', 'grad', 'grad_err', 'grad_r_err', 'rsma', 
-	'mag', 'mag_lerr', 'mag_uerr', 'tflux_e', 'tflux_c', 'tmag_e', 'tmag_c', 'npix_e', 'npix_c', 
-	'a3', 'a3_err', 'b3', 'b3_err', 'a4', 'a4_err', 'b4', 'b4_err', 'ndata', 'nflag', 'niter', 
-	'stop', 'a_big', 'sarea', 'raw_pa', 'sma_pix', 'sb', 'b6', 'b6_err', 'b8', 'b8_err',
-	'b10', 'b10_err', 'b12' 'b12_err']
+    'pa', 'pa_err', 'x0', 'x0_err', 'y0', 'y0_err', 'grad', 'grad_err', 'grad_r_err', 'rsma', 
+    'mag', 'mag_lerr', 'mag_uerr', 'tflux_e', 'tflux_c', 'tmag_e', 'tmag_c', 'npix_e', 'npix_c', 
+    'a3', 'a3_err', 'b3', 'b3_err', 'a4', 'a4_err', 'b4', 'b4_err', 'ndata', 'nflag', 'niter', 
+    'stop', 'a_big', 'sarea', 'raw_pa', 'sma_pix', 'sb', 'b6', 'b6_err', 'b8', 'b8_err',
+    'b10', 'b10_err', 'b12' 'b12_err']
 
 # the following columns are integer-valued
 integerColumns = ["row", "ndata", "nflag", "niter", "stop"]
 
 # pixelScales = { "WIYN": 0.2, "PC2": 0.0455, "PC1": 0.043, "WF": 0.1,
-# 				"NIC3": 0.2, "NIC2": 0.075, "NIC1": 0.043, "ACSWFC": 0.05,
-# 				"ACSHRC": 0.025, "DSS": 1.7, "Alfosc": 0.188,
-# 				"OldAlfosc": 0.189, "SDSS": 0.396, "INTWFC": 0.331 }
+#               "NIC3": 0.2, "NIC2": 0.075, "NIC1": 0.043, "ACSWFC": 0.05,
+#               "ACSHRC": 0.025, "DSS": 1.7, "Alfosc": 0.188,
+#               "OldAlfosc": 0.189, "SDSS": 0.396, "INTWFC": 0.331 }
 
 HIGHER_HARMONIC_RAWNAMES = ["ai5", "bi5", "ai6", "bi6", "ai7", "bi7",
-							"ai8", "bi8", "ai9", "bi9", "ai10", "bi10",
-							"ai11", "bi11", "ai12", "bi12"]
+                            "ai8", "bi8", "ai9", "bi9", "ai10", "bi10",
+                            "ai11", "bi11", "ai12", "bi12"]
 SCALED_NAMES = {"ai5": "a5", "bi5": "b5", "ai6": "a6", "bi6": "b6", 
-				"ai7": "a7", "bi7": "b7", "ai8": "a8", "bi8": "b8",
-				"ai9": "a9", "bi10": "b10", "ai11": "a11", "bi12": "b12"}
+                "ai7": "a7", "bi7": "b7", "ai8": "a8", "bi8": "b8",
+                "ai9": "a9", "bi10": "b10", "ai11": "a11", "bi12": "b12"}
 
 
 k_pcperarcsec = 1.0e6 / 206265.0   # conversion factor: (pc/Mpc) / (AU/pc)
@@ -142,1017 +145,1021 @@ k_pcperarcsec = 1.0e6 / 206265.0   # conversion factor: (pc/Mpc) / (AU/pc)
 
 # Stuff for making log axis tick numbers nicer
 def niceLogFunc( x, pos ):
-	return ('{{:.{:1d}f}}'.format(int(np.maximum(-np.log10(x),0)))).format(x)	
+    return ('{{:.{:1d}f}}'.format(int(np.maximum(-np.log10(x),0)))).format(x)   
 NiceLogFormatter = ticker.FuncFormatter(niceLogFunc)
 
 def MakeNiceLogAxes( whichAxis="xy", axisObj=None ):
-	"""
-	Makes one or more axes of a plot display tick labels using non-scientific
-	notation (e.g., "0.01" instead of "10^{-2}")
+    """
+    Makes one or more axes of a plot display tick labels using non-scientific
+    notation (e.g., "0.01" instead of "10^{-2}")
 
-	Parameters
+    Parameters
     ----------
     whichAxis : {"x", "y", "xy"}
-    	Specifies which axis to convert
+        Specifies which axis to convert
     
     axisObjs : matplotlib.axes.Axes or subclass, optional
-    	an Axes object to convert the tick-label display for
-    	
+        an Axes object to convert the tick-label display for
+        
     Returns
     -------
     None
-	"""
-	
-	if axisObj is None:
-		ax = plt.gca()
-	else:
-		ax = axisObj
-	if whichAxis in ["x", "xy"]:
-		ax.xaxis.set_major_formatter(NiceLogFormatter)
-	if whichAxis in ["y", "xy"]:
-		ax.yaxis.set_major_formatter(NiceLogFormatter)
+    """
+    
+    if axisObj is None:
+        ax = plt.gca()
+    else:
+        ax = axisObj
+    if whichAxis in ["x", "xy"]:
+        ax.xaxis.set_major_formatter(NiceLogFormatter)
+    if whichAxis in ["y", "xy"]:
+        ax.yaxis.set_major_formatter(NiceLogFormatter)
 
 
 def pcperarcsec( distMpc ):
-	"""Calculate parsecs/arc second, given a distance in Mpc.
+    """Calculate parsecs/arc second, given a distance in Mpc.
 
-	Parameters
+    Parameters
     ----------
     distMpc : float
-    	angular-size distance to object
+        angular-size distance to object
     
     Returns
     -------
     parsecs_per_arcsec : float
-	"""
+    """
 
 
 def EllipseCircum( a, b ):
-	"""Calcluates circumference of an ellipse.
-	
-	Given an ellipse defined by semi-major axis a and semi-minor axis b, 
-	the function returns the circumference of the ellipse, using the 
-	approximation of Ramanujan.
-	
-	Parameters
+    """Calcluates circumference of an ellipse.
+    
+    Given an ellipse defined by semi-major axis a and semi-minor axis b, 
+    the function returns the circumference of the ellipse, using the 
+    approximation of Ramanujan.
+    
+    Parameters
     ----------
     a : float
-    	semi-major axis of ellipse
+        semi-major axis of ellipse
     
     b : float
-    	semi-minor axis of ellipse
+        semi-minor axis of ellipse
     
     Returns
     -------
     circumference : float
     """
-	
-	return math.pi * ( 3*(a + b) - math.sqrt( (3*a +  b)*(a + 3*b) ) )
+    
+    return math.pi * ( 3*(a + b) - math.sqrt( (3*a +  b)*(a + 3*b) ) )
 
 
 def EllipseR( a, ellipticity, pa, referencePA ):
-	"""Calcute radius where vector from center crosses boundary of an ellipse.
-	
-	Given an ellipse with specified semi-major axis, ellipticity, and
-	position angle (a, ellipticity, pa), this function returns the radius 
-	from the ellipse center where a vector from the center of the ellipse 
-	at position angle = referencePA intersects the ellipse.  Angles are 
-	assumed to be in degrees.
-	
-	Parameters
+    """Calcute radius where vector from center crosses boundary of an ellipse.
+    
+    Given an ellipse with specified semi-major axis, ellipticity, and
+    position angle (a, ellipticity, pa), this function returns the radius 
+    from the ellipse center where a vector from the center of the ellipse 
+    at position angle = referencePA intersects the ellipse.  Angles are 
+    assumed to be in degrees.
+    
+    Parameters
     ----------
     a : float
-    	semi-major axis of ellipse
+        semi-major axis of ellipse
     
     ellipticity : float
-    	ellipse ellipticity (1 - b/a)
+        ellipse ellipticity (1 - b/a)
     
     pa : float
-    	position angle of ellipse major axis [degrees]
+        position angle of ellipse major axis [degrees]
     
     referencePA: float
-    	position angle of vector [degrees]
+        position angle of vector [degrees]
     
     Returns
     -------
     radius : float
-    	distance from the ellipse center to ellipse along vector
-	"""
-	
-	b = a*(1.0 - ellipticity)
-	dPA_rad = np.radians(pa - referencePA)
-	
-	return 1.0 / np.sqrt( (np.cos(dPA_rad)/a)**2 + (np.sin(dPA_rad)/b)**2 )
-	
+        distance from the ellipse center to ellipse along vector
+    """
+    
+    b = a*(1.0 - ellipticity)
+    dPA_rad = np.radians(pa - referencePA)
+    
+    return 1.0 / np.sqrt( (np.cos(dPA_rad)/a)**2 + (np.sin(dPA_rad)/b)**2 )
+    
 
 
 def CorrectPosAngle( posAngle, telescopePA=None, flipFlag=False, outputNP=False ):
-	"""Correct position angles from (-90 < PA < +90) to (0 < PA < 180).
-	
-	Given position angles [in degrees] in IRAF ellipse format (-90 < PA < +90),
-	this function returns the corresponding angle in standard astronomical
-	format (0 < PA < 180 degrees), optionally correcting for orientation of
-	image so that angles are degrees E of N.
-	
-	Output is list if input is sequence (tuple, list, or numpy array), float
-	otherwise (use outputNP=True to force numpy array output for sequence input).
+    """Correct position angles from (-90 < PA < +90) to (0 < PA < 180).
+    
+    Given position angles [in degrees] in IRAF ellipse format (-90 < PA < +90),
+    this function returns the corresponding angle in standard astronomical
+    format (0 < PA < 180 degrees), optionally correcting for orientation of
+    image so that angles are degrees E of N.
+    
+    Output is list if input is sequence (tuple, list, or numpy array), float
+    otherwise (use outputNP=True to force numpy array output for sequence input).
 
-	Parameters
+    Parameters
     ----------
     posAngle : float or sequence
-    	position angle [degrees] in IRAF ellipse format (-90 < PA < +90)
+        position angle [degrees] in IRAF ellipse format (-90 < PA < +90)
     
     telescopePA : float or None, optional
-    	angle from N to the image +y axis (measured in degrees E of N).
-		If supplied, angles will be converted to degrees E of N.
-	
+        angle from N to the image +y axis (measured in degrees E of N).
+        If supplied, angles will be converted to degrees E of N.
+    
     flipFlag : bool, optional
-    	If True, angles are reflected about image y-axis
+        If True, angles are reflected about image y-axis
     
     outputNP: bool, optional
-    	If True and input is a sequence, output will be numpy.ndarray
+        If True and input is a sequence, output will be numpy.ndarray
     
     Returns
     -------
     correctedAngle : float or list or numpy.ndarray
-	"""
-	
-	if type(posAngle) in (tuple, list, np.ndarray):
-		isSequence = True
-	else:
-		isSequence = False
-		PA = [posAngle]
-	# copy list into numpy array
-	PA = np.array(posAngle)
-	if isSequence:
-		nVals = len(PA)
-		negVals = PA < 0.0
-		PA[negVals] = 180 - np.abs(PA[negVals])
-	else:
-		if PA < 0.0:
-			PA = 180 - np.abs(PA)
-	if flipFlag:
-		PA = 180.0 - PA
-	
-	if telescopePA is not None:
-		if telescopePA >= 180.0:
-			telescopePA -= 180.0
-		newPA = PA + telescopePA
-		if isSequence:
-			bigVals = newPA >= 360.0
-			newPA[bigVals] = newPA[bigVals] - 360.0
-			bigVals = newPA >= 180.0
-			newPA[bigVals] = newPA[bigVals] - 180.0
-		else:
-			if newPA >= 360.0:
-				newPA = newPA - 360.0
-				if newPA > 180.0:
-					newPA = newPA = 180.0
-	else:
-		newPA = PA
-	
-	if isSequence:
-		if outputNP:
-			return newPA
-		else:
-			return list(newPA)
-	else:
-		return float(newPA)
+    """
+    
+    if type(posAngle) in (tuple, list, np.ndarray):
+        isSequence = True
+    else:
+        isSequence = False
+        PA = [posAngle]
+    # copy list into numpy array
+    PA = np.array(posAngle)
+    if isSequence:
+        nVals = len(PA)
+        negVals = PA < 0.0
+        PA[negVals] = 180 - np.abs(PA[negVals])
+    else:
+        if PA < 0.0:
+            PA = 180 - np.abs(PA)
+    if flipFlag:
+        PA = 180.0 - PA
+    
+    if telescopePA is not None:
+        if telescopePA >= 180.0:
+            telescopePA -= 180.0
+        newPA = PA + telescopePA
+        if isSequence:
+            bigVals = newPA >= 360.0
+            newPA[bigVals] = newPA[bigVals] - 360.0
+            bigVals = newPA >= 180.0
+            newPA[bigVals] = newPA[bigVals] - 180.0
+        else:
+            if newPA >= 360.0:
+                newPA = newPA - 360.0
+                if newPA > 180.0:
+                    newPA = newPA = 180.0
+    else:
+        newPA = PA
+    
+    if isSequence:
+        if outputNP:
+            return newPA
+        else:
+            return list(newPA)
+    else:
+        return float(newPA)
 
 
 def _ReadEllipse_fits( filename ):
-	"""Read an ellipse-fit table in FITS format.
-	
-	Utility function to read an IRAF ellipse fit in FITS table format, as generated
-	by the tables.tcopy task. Output is a tuple of
-	(dictionary containing the columns, list of lower-cased column names).
-	
-	Parameters
+    """Read an ellipse-fit table in FITS format.
+    
+    Utility function to read an IRAF ellipse fit in FITS table format, as generated
+    by the tables.tcopy task. Output is a tuple of
+    (dictionary containing the columns, list of lower-cased column names).
+    
+    Parameters
     ----------
     filename : str
-    	path to FITS table
+        path to FITS table
     
     Returns
     -------
     (dataDict, columNames) : tuple of (dict, list)
-    	dataDict = dict mapping column names (str) to 1D numpy.ndarray
-    	columnNames = list of str for column names
-	"""
-	
-	tabdat = fits.open(filename)[1].data
-	dataDict = {}
-	columnNames = []
-	for columnDef in tabdat.columns:
-		colName = columnDef.name.lower()
-		dataDict[colName] = np.array(columnDef.array)
-		columnNames.append(colName)
-	return (dataDict, columnNames)
-	
-	
-	
+        dataDict = dict mapping column names (str) to 1D numpy.ndarray
+        columnNames = list of str for column names
+    """
+    
+    tabdat = fits.open(filename)[1].data
+    dataDict = {}
+    columnNames = []
+    for columnDef in tabdat.columns:
+        colName = columnDef.name.lower()
+        dataDict[colName] = np.array(columnDef.array)
+        columnNames.append(colName)
+    return (dataDict, columnNames)
+    
+    
+    
 def _ReadEllipse_tprint( lines ):
-	"""Read an ellipse-fit table in tprint format. [Deprecated]
-	
-	Utility function to read an IRAF ellipse fit in tprint-generated text-file
-	form (supplied as a list of lines read in from the file).  Output is a tuple of
-	(dictionary containing the columns, list of lower-cased column names).
-	
-	Parameters
+    """Read an ellipse-fit table in tprint format. [Deprecated]
+    
+    Utility function to read an IRAF ellipse fit in tprint-generated text-file
+    form (supplied as a list of lines read in from the file).  Output is a tuple of
+    (dictionary containing the columns, list of lower-cased column names).
+    
+    Parameters
     ----------
     lines : list of str
-    	list of lines read from text file
+        list of lines read from text file
         
     Returns
     -------
     (dataDict, columNames) : tuple of (dict, list)
-    	dataDict = dict mapping column names (str) to 1D numpy.ndarray
-    	columnNames = list of str for column names
-	"""
+        dataDict = dict mapping column names (str) to 1D numpy.ndarray
+        columnNames = list of str for column names
+    """
 
-	commentlines = [line.strip() for line in lines if line[0] == "#"]
-	# skip first comment line
-	nBlocks = int(len(commentlines[1:]) / 2)
-	columnNameLines = [ commentlines[2*i + 1] for i in range(nBlocks) ]
+    commentlines = [line.strip() for line in lines if line[0] == "#"]
+    # skip first comment line
+    nBlocks = int(len(commentlines[1:]) / 2)
+    columnNameLines = [ commentlines[2*i + 1] for i in range(nBlocks) ]
 
-	datalines = [line.strip() for line in lines if line[0] not in ["#", "\n"] ]
-	nPts = int(len(datalines)/nBlocks)
-	
-	dataDict = {}
-	columnNameList = []
-	
-	for i in range(nBlocks):
-		pp = columnNameLines[i].split()
-		colNames = [ name.lower() for name in pp[1:] ]
-		nCols = len(colNames)
-		for colname in colNames:
-			if colname != "row":
-				dataDict[colname] = []
-				columnNameList.append(colname)
-		
-		for j in range(nPts):
-			dataline = datalines[nPts*i + j]
-			datapieces = dataline.split()
-			for cc in range(nCols):
-				colName = colNames[cc]
-				dataPiece = datapieces[cc]
-				if colName != "row":
-					if colName in integerColumns:
-						try:
-							dataVal = int(dataPiece)
-						except ValueError:
-							print(dataline)
-							print(dataPiece)
-							raise
-					else:
-						try:
-							dataVal = float(dataPiece)
-						except ValueError as e:
-							if dataPiece == "INDEF":
-								dataVal = 0.0
-							else:
-								raise ValueError(e)
-					dataDict[colName].append(dataVal)	
+    datalines = [line.strip() for line in lines if line[0] not in ["#", "\n"] ]
+    nPts = int(len(datalines)/nBlocks)
+    
+    dataDict = {}
+    columnNameList = []
+    
+    for i in range(nBlocks):
+        pp = columnNameLines[i].split()
+        colNames = [ name.lower() for name in pp[1:] ]
+        nCols = len(colNames)
+        for colname in colNames:
+            if colname != "row":
+                dataDict[colname] = []
+                columnNameList.append(colname)
+        
+        for j in range(nPts):
+            dataline = datalines[nPts*i + j]
+            datapieces = dataline.split()
+            for cc in range(nCols):
+                colName = colNames[cc]
+                dataPiece = datapieces[cc]
+                if colName != "row":
+                    if colName in integerColumns:
+                        try:
+                            dataVal = int(dataPiece)
+                        except ValueError:
+                            print(dataline)
+                            print(dataPiece)
+                            raise
+                    else:
+                        try:
+                            dataVal = float(dataPiece)
+                        except ValueError as e:
+                            if dataPiece == "INDEF":
+                                dataVal = 0.0
+                            else:
+                                raise ValueError(e)
+                    dataDict[colName].append(dataVal)   
 
-	return dataDict, columnNameList
+    return dataDict, columnNameList
 
 
 def _ReadEllipse_tdump( lines ):
-	"""Read an ellipse-fit table in tdump format.
-	
-	Utility function to read an IRAF ellipse fit in tdump-generated text-file
-	form (supplied as a list of lines read in from the file).  Output is a tuple of
-	(dictionary containing the columns, list of lower-cased column names, name of
-	original fitted image).
-	
-	Parameters
+    """Read an ellipse-fit table in tdump format.
+    
+    Utility function to read an IRAF ellipse fit in tdump-generated text-file
+    form (supplied as a list of lines read in from the file).  Output is a tuple of
+    (dictionary containing the columns, list of lower-cased column names, name of
+    original fitted image).
+    
+    Parameters
     ----------
     lines : list of str
-    	list of lines read from text file
+        list of lines read from text file
     
     Returns
     -------
     (dataDict, columNames) : tuple of (dict, list)
-    	dataDict = dict mapping column names (str) to 1D numpy.ndarray
-    	columnNames = list of str for column names
-	"""
+        dataDict = dict mapping column names (str) to 1D numpy.ndarray
+        columnNames = list of str for column names
+    """
 
-	for i in range(len(lines)):
-		if lines[i].startswith("IMAGE"):
-			lastHeader = i
-	
-	colHeaderlines = lines[0:lastHeader]   # very last "header" line is IMAGE name
-	imageName = lines[lastHeader].split()[-1].strip()
-	datalines = lines[lastHeader + 1:]
-	nDataRows = len(datalines)
+    for i in range(len(lines)):
+        if lines[i].startswith("IMAGE"):
+            lastHeader = i
+    
+    colHeaderlines = lines[0:lastHeader]   # very last "header" line is IMAGE name
+    imageName = lines[lastHeader].split()[-1].strip()
+    datalines = lines[lastHeader + 1:]
+    nDataRows = len(datalines)
 
-	columnNameList = [ line.split()[0].lower() for line in colHeaderlines ]
+    columnNameList = [ line.split()[0].lower() for line in colHeaderlines ]
 
-	nColumns = len(colHeaderlines)
-	nElements = len(datalines[0].split())
-	if (nElements != nColumns):
-		msg = "ERROR: Number of column titles (%d) not equal to number of columns (%d)!" % (nElements, nColumns)
-		print(msg)
-		return None, None
-	dataList = []
-	for i in range(nColumns):
-		dataList.append([])
-	# go through the table and assign entries to individual-column lists
-	for n in range(nDataRows):
-		pieces = datalines[n].split()
-		for i in range(nColumns):
-			colName = columnNameList[i]
-			dataPiece = pieces[i]
-			if colName in integerColumns:
-				try:
-					dataVal = int(dataPiece)
-				except ValueError:
-					print(datalines[n])
-					print(dataPiece)
-					raise ValueError(e)
-			else:
-				try:
-					dataVal = float(dataPiece)
-				except ValueError as e:
-					if dataPiece == "INDEF":
-						dataVal = 0.0
-					else:
-						raise ValueError(e)
-			dataList[i].append(dataVal)
-	
-	# create dictionary and assign columns to column names
-	dataDict = {}
-	for i in range(nColumns):
-		dataDict[columnNameList[i]] = dataList[i]
-	
-	return dataDict, columnNameList, imageName
+    nColumns = len(colHeaderlines)
+    nElements = len(datalines[0].split())
+    if (nElements != nColumns):
+        msg = "ERROR: Number of column titles {0}".format(nElements)
+        msg += " not equal to number of columns {0}!".format(nColumns)
+        print(msg)
+        return None, None
+    dataList = []
+    for i in range(nColumns):
+        dataList.append([])
+    # go through the table and assign entries to individual-column lists
+    for n in range(nDataRows):
+        pieces = datalines[n].split()
+        for i in range(nColumns):
+            colName = columnNameList[i]
+            dataPiece = pieces[i]
+            if colName in integerColumns:
+                try:
+                    dataVal = int(dataPiece)
+                except ValueError:
+                    print(datalines[n])
+                    print(dataPiece)
+                    raise ValueError(e)
+            else:
+                try:
+                    dataVal = float(dataPiece)
+                except ValueError as e:
+                    if dataPiece == "INDEF":
+                        dataVal = 0.0
+                    else:
+                        raise ValueError(e)
+            dataList[i].append(dataVal)
+    
+    # create dictionary and assign columns to column names
+    dataDict = {}
+    for i in range(nColumns):
+        dataDict[columnNameList[i]] = dataList[i]
+    
+    return dataDict, columnNameList, imageName
 
-	
+    
 def ReadEllipse( filename, pix=None, dataFrame=True, correctPA=True,
-					telPA=None, flip=False, ZP=None, smaUnits=None ):
-	"""Read in an ellipse-fit table from a file.
-	
-	Reads in an ellipse fit table file generated by the IRAF STSDAS task ellipse
-	and stores it in a dictionary or a ListDataFrame [default]. The original column 
-	names are transformed into lower-case (e.g., ELLIP_ERR --> ellip_err). All 
-	columns are converted to 1-D numpy.ndarray objects.
-	
-	Returns a datautils.ListDataFrame object [default] or (if dataFrame=False), a
-	Python dict mapping column names to numpy arrays.
-	
-	The input table is assumed to be a text file which has been generated from the 
-	original STSDAS-table file via either "tprint" or "tdump". The function will 
-	attempt to guess which format is in use from the first few lines of the file.
-	Alternately, it can be a FITS table generated by "tcopy" (with filename ending 
-	in ".fit", ".fits", ".FIT", or ".FITS").
-	
-	
-	Parameters
+                    telPA=None, flip=False, ZP=None, smaUnits=None ):
+    """Read in an ellipse-fit table from a file.
+    
+    Reads in an ellipse fit table file generated by the IRAF STSDAS task ellipse
+    and stores it in a dictionary or a ListDataFrame [default]. The original column 
+    names are transformed into lower-case (e.g., ELLIP_ERR --> ellip_err). All 
+    columns are converted to 1-D numpy.ndarray objects.
+    
+    Returns a datautils.ListDataFrame object [default] or (if dataFrame=False), a
+    Python dict mapping column names to numpy arrays.
+    
+    The input table is assumed to be a text file which has been generated from the 
+    original STSDAS-table file via either "tprint" or "tdump". The function will 
+    attempt to guess which format is in use from the first few lines of the file.
+    Alternately, it can be a FITS table generated by "tcopy" (with filename ending 
+    in ".fit", ".fits", ".FIT", or ".FITS").
+    
+    
+    Parameters
     ----------
     filename : str
-    	path to table file containing output of IRAF ellipse (converted from STSDAS
-    	table form)
+        path to table file containing output of IRAF ellipse (converted from STSDAS
+        table form)
     
     pix : float or None, optional
-    	scale for pixels (e.g., arc seconds per pixel)
+        scale for pixels (e.g., arc seconds per pixel)
     
     dataFrame : bool, optional
-    	if True [default], output is datautils.ListDataFrame; otherwise, output is dict
+        if True [default], output is datautils.ListDataFrame; otherwise, output is dict
     
     correctPA : bool, optional
-    	if True [default], position angles are corrected to standard astronomical
-    	form
+        if True [default], position angles are corrected to standard astronomical
+        form
     
     telPA : float or None, optional
-    	orientation of image (position of image +y axis on sky, in degrees E of N)
+        orientation of image (position of image +y axis on sky, in degrees E of N)
     
     flip : bool, optional
-    	if True, position angles are flipped about the y-axis
+        if True, position angles are flipped about the y-axis
     
     ZP : float or None, optional
-    	effective zero point for converting counts/pixel into mag arcsec^-2
+        effective zero point for converting counts/pixel into mag arcsec^-2
     
     smaUnits : str or None, optional
-    	label describing units for semi-major axis (after applying `pix` conversion)
+        label describing units for semi-major axis (after applying `pix` conversion)
     
     Returns
     -------
     ellipseFit : dict or datautils.ListDataFrame
 
 
-	Notes
-	-----
-	If correctPA = True [the default], then position angles are corrected
-	from the raw ellipse-fit values (-90 < pa < +90) to standard astronomical values; 
-	the original position-angle values are stored in a new column named "raw_pa".
-	By default, this corrects position angles to degrees CCW of the image +y axis.
-	Alternately, the user can specify the angle of the +y axis on the sky, in
-	degrees E of N, via the telPA keyword.
+    Notes
+    -----
+    If correctPA = True [the default], then position angles are corrected
+    from the raw ellipse-fit values (-90 < pa < +90) to standard astronomical values; 
+    the original position-angle values are stored in a new column named "raw_pa".
+    By default, this corrects position angles to degrees CCW of the image +y axis.
+    Alternately, the user can specify the angle of the +y axis on the sky, in
+    degrees E of N, via the telPA keyword.
 
-	If the pixel scale (e.g., in units of arcsec/pixel) is known, it can be supplied
-	via the pix keyword, and the semi-major axis (as well as semi-minor axis
-	and equivalent radius) will be converted from pixels to arc seconds.
-	The original semi-major axis pixel values are stored in an additional column 
-	named "sma_pix".
-	
-	The following additional columns are automatically generated:
-		"b" = semi-minor axes of the fitted ellipses
-		"req" = equivalent radii [sqrt(a*b)] of the fitted ellipses
-		"q" = axis ratios of the fitted ellipses (= 1 - ellipticity)
-	
-	If the requested output is a datautils.ListDataFrame object, then a few additional 
-	metadata attributes are defined: 
-		dataframe.tableFile has the path to the original input table file
-		dataframe.sma_units = "pixels" or "arcsec" (the latter only if the user 
-	specified a pixel scale via the pix keyword) or user-supplied smaUnits
-		dataframe.units_per_pix has the user-supplied pixel scale (if any) 
-		dataframe.origImage has the original fitted image name -- *if* the input
-	ellipse-fit file was in tdump format (tprint format does not preserve that 
-	information, nor does converting the table to FITS format with tcopy). 
-		dataframe.zp_sb = user-supplied effective zero point (= None if none was
-	supplied)
-	 
-	In addition, the ListDataFrame object will have additional alternate 
-	column names "a" for "SMA" and "i" for "INTENS".
-	"""
-	
-	# Call internal utility functions to get basic dict mapping column names to
-	# lists of values and list of column names, based on format of input file
-	fnameBase = os.path.split(filename)
-	rootName,ext = os.path.splitext(filename)
-	if ext in [".fit", ".fits", ".FIT", ".FITS"]:
-		# FITS table
-		dataDict, columnNameList = _ReadEllipse_fits(filename)
-		originalImage = None
-	else:
-		# text-file format
-		lines = open(filename).readlines()
-		# identify whether it's tprint or tdump output and read it in accordingly
-		if lines[0].startswith("#  Table"):
-			# table was generated by tprint
-			dataDict, columnNameList = _ReadEllipse_tprint(lines)
-			originalImage = None
-		elif lines[0].startswith("SMA              R           %7.2f  pixel"):
-			# table was generated by tdump
-			dataDict, columnNameList, originalImage = _ReadEllipse_tdump(lines)
-	
-	
-	# Post-processing:
-	# correct the position angles:
-	dataDict["raw_pa"] = dataDict["pa"]
-	dataDict["pa"] = CorrectPosAngle(dataDict["pa"], telPA, flip)
-	# provide more useful/predictable intensity-error key:
-	dataDict["intens_err"] = dataDict["int_err"]
-	# change SMA value from pixels to arcsec (or other user-defined unit):
-	if smaUnits is None:
-		if pix is None:
-			smaUnits = "pixels"
-		else:
-			smaUnits = "arc sec"
-	dataDict["sma_pix"] = dataDict["sma"]
-	userPixelScale = None
-	if pix is None:
-		pix = 1.0
-	else:
-		userPixelScale = pix
-	dataDict["sma"] = [ pix*sma for sma in dataDict["sma"] ]
-	# add list of column names in original order
-	columnNameList.append("raw_pa")
-	columnNameList.append("sma_pix")
-	
-	# compute correct higher-order harmonic values, if present:
-	higherHarmonicsPresent = False
-	for rawnameHH in HIGHER_HARMONIC_RAWNAMES:
-		if rawnameHH in columnNameList:
-			higherHarmonicsPresent = True
-	if higherHarmonicsPresent is True:
-		sma = np.array(dataDict["sma_pix"])
-		gradient = np.array(dataDict["grad"])
-		sma_times_grad = sma*gradient
-		for rawHarmonic in HIGHER_HARMONIC_RAWNAMES:
-			if rawHarmonic in columnNameList:
-				rawData = np.array(dataDict[rawHarmonic])
-				rawErr = np.array(dataDict[rawHarmonic + "_err"])
-				# do conversion using -(raw_amplitude) [e.g., Eq.6 in Ciambur 2015]
-				scaledData = -rawData / sma_times_grad
-				scaledErr = rawErr / sma_times_grad
-				scaledName = SCALED_NAMES[rawHarmonic]
-				scaledErrName = scaledName + "_err"
-				dataDict[scaledName] = scaledData
-				dataDict[scaledErrName] = scaledErr
-				columnNameList.append(scaledName)
-				columnNameList.append(scaledErrName)
-	
-	# Convert all columns to numpy arrays
-	for cname in columnNameList:
-		dataDict[cname] = np.array(dataDict[cname])
-	
-	if ZP is not None:
-		dataDict["sb"] = ZP - 2.5*np.log10(dataDict['intens'])
-		columnNameList.append("sb")
-	
-	# Generate semi-minor axis, axis ratio, equivalent radius req = sqrt(a^2 + b^2)
-	dataDict["b"] = (1.0 - dataDict["ellip"]) * dataDict["sma"]
-	dataDict["q"] = (1.0 - dataDict["ellip"])
-	dataDict["q_err"] = dataDict["ellip_err"]
-	dataDict["req"] = EquivRadius(dataDict)
-	columnNameList.append("b")
-	columnNameList.append("q")
-	columnNameList.append("q_err")
-	columnNameList.append("req")
+    If the pixel scale (e.g., in units of arcsec/pixel) is known, it can be supplied
+    via the pix keyword, and the semi-major axis (as well as semi-minor axis
+    and equivalent radius) will be converted from pixels to arc seconds.
+    The original semi-major axis pixel values are stored in an additional column 
+    named "sma_pix".
+    
+    The following additional columns are automatically generated:
+        "b" = semi-minor axes of the fitted ellipses
+        "req" = equivalent radii [sqrt(a*b)] of the fitted ellipses
+        "q" = axis ratios of the fitted ellipses (= 1 - ellipticity)
+    
+    If the requested output is a datautils.ListDataFrame object, then a few additional 
+    metadata attributes are defined: 
+        dataframe.tableFile has the path to the original input table file
+        dataframe.sma_units = "pixels" or "arcsec" (the latter only if the user 
+    specified a pixel scale via the pix keyword) or user-supplied smaUnits
+        dataframe.units_per_pix has the user-supplied pixel scale (if any) 
+        dataframe.origImage has the original fitted image name -- *if* the input
+    ellipse-fit file was in tdump format (tprint format does not preserve that 
+    information, nor does converting the table to FITS format with tcopy). 
+        dataframe.zp_sb = user-supplied effective zero point (= None if none was
+    supplied)
+     
+    In addition, the ListDataFrame object will have additional alternate 
+    column names "a" for "SMA" and "i" for "INTENS".
+    """
+    
+    # Call internal utility functions to get basic dict mapping column names to
+    # lists of values and list of column names, based on format of input file
+    fnameBase = os.path.split(filename)
+    rootName,ext = os.path.splitext(filename)
+    if ext in [".fit", ".fits", ".FIT", ".FITS"]:
+        # FITS table
+        dataDict, columnNameList = _ReadEllipse_fits(filename)
+        originalImage = None
+    else:
+        # text-file format
+        lines = open(filename).readlines()
+        # identify whether it's tprint or tdump output and read it in accordingly
+        if lines[0].startswith("#  Table"):
+            # table was generated by tprint
+            dataDict, columnNameList = _ReadEllipse_tprint(lines)
+            originalImage = None
+        elif lines[0].startswith("SMA              R           %7.2f  pixel"):
+            # table was generated by tdump
+            dataDict, columnNameList, originalImage = _ReadEllipse_tdump(lines)
+    
+    
+    # Post-processing:
+    # correct the position angles:
+    dataDict["raw_pa"] = dataDict["pa"]
+    dataDict["pa"] = CorrectPosAngle(dataDict["pa"], telPA, flip)
+    # provide more useful/predictable intensity-error key:
+    dataDict["intens_err"] = dataDict["int_err"]
+    # change SMA value from pixels to arcsec (or other user-defined unit):
+    if smaUnits is None:
+        if pix is None:
+            smaUnits = "pixels"
+        else:
+            smaUnits = "arc sec"
+    dataDict["sma_pix"] = dataDict["sma"]
+    userPixelScale = None
+    if pix is None:
+        pix = 1.0
+    else:
+        userPixelScale = pix
+    dataDict["sma"] = [ pix*sma for sma in dataDict["sma"] ]
+    # add list of column names in original order
+    columnNameList.append("raw_pa")
+    columnNameList.append("sma_pix")
+    
+    # compute correct higher-order harmonic values, if present:
+    higherHarmonicsPresent = False
+    for rawnameHH in HIGHER_HARMONIC_RAWNAMES:
+        if rawnameHH in columnNameList:
+            higherHarmonicsPresent = True
+    if higherHarmonicsPresent is True:
+        sma = np.array(dataDict["sma_pix"])
+        gradient = np.array(dataDict["grad"])
+        sma_times_grad = sma*gradient
+        for rawHarmonic in HIGHER_HARMONIC_RAWNAMES:
+            if rawHarmonic in columnNameList:
+                rawData = np.array(dataDict[rawHarmonic])
+                rawErr = np.array(dataDict[rawHarmonic + "_err"])
+                # do conversion using -(raw_amplitude) [e.g., Eq.6 in Ciambur 2015]
+                scaledData = -rawData / sma_times_grad
+                scaledErr = rawErr / sma_times_grad
+                scaledName = SCALED_NAMES[rawHarmonic]
+                scaledErrName = scaledName + "_err"
+                dataDict[scaledName] = scaledData
+                dataDict[scaledErrName] = scaledErr
+                columnNameList.append(scaledName)
+                columnNameList.append(scaledErrName)
+    
+    # Convert all columns to numpy arrays
+    for cname in columnNameList:
+        dataDict[cname] = np.array(dataDict[cname])
+    
+    if ZP is not None:
+        dataDict["sb"] = ZP - 2.5*np.log10(dataDict['intens'])
+        columnNameList.append("sb")
+    
+    # Generate semi-minor axis, axis ratio, equivalent radius req = sqrt(a^2 + b^2)
+    dataDict["b"] = (1.0 - dataDict["ellip"]) * dataDict["sma"]
+    dataDict["q"] = (1.0 - dataDict["ellip"])
+    dataDict["q_err"] = dataDict["ellip_err"]
+    dataDict["req"] = EquivRadius(dataDict)
+    columnNameList.append("b")
+    columnNameList.append("q")
+    columnNameList.append("q_err")
+    columnNameList.append("req")
 
-	dataDict["column_list"] = columnNameList
-			
-	# Convert to datautils.ListDataFrame, if requested:
-	if dataFrame is True:
-		frameList = []
-		for cname in columnNameList:
-			frameList.append(dataDict[cname])
-		result = du.ListDataFrame(frameList, columnNameList)
-		# extra conveniences (aliased column names)
-		result.AddColumnName("sma", "a")
-		result.AddColumnName("intens", "i")
-		# add meta-data
-		result.tableFile = filename
-		result.sma_units = smaUnits
-		result.units_per_pix = userPixelScale
-		result.origImage = originalImage
-		result.zp_sb = ZP
-	else:
-		result = dataDict
-		
-	return result
+    dataDict["column_list"] = columnNameList
+            
+    # Convert to datautils.ListDataFrame, if requested:
+    if dataFrame is True:
+        frameList = []
+        for cname in columnNameList:
+            frameList.append(dataDict[cname])
+        result = du.ListDataFrame(frameList, columnNameList)
+        # extra conveniences (aliased column names)
+        result.AddColumnName("sma", "a")
+        result.AddColumnName("intens", "i")
+        # add meta-data
+        result.tableFile = filename
+        result.sma_units = smaUnits
+        result.units_per_pix = userPixelScale
+        result.origImage = originalImage
+        result.zp_sb = ZP
+    else:
+        result = dataDict
+        
+    return result
 
 
 
 def ReplaceColumnsWithConstants( efit, colNameList, colValueList, smarange=None ):
-	"""Replace values in an ellipse-fit column with constant.
-	
-	Given an ellipse-fit dictionary, for each column name in colNameList,
-	replace the existing values with the corresponding constant value in colValueList.
-	Optionally, the range in semi-major axis for which values are replaced can be 
-	specified via smarange (only semi-major axis values >= smarange[0] and 
-	<= smarange[1] will be affectd).
+    """Replace values in an ellipse-fit column with constant.
+    
+    Given an ellipse-fit dictionary, for each column name in colNameList,
+    replace the existing values with the corresponding constant value in colValueList.
+    Optionally, the range in semi-major axis for which values are replaced can be 
+    specified via smarange (only semi-major axis values >= smarange[0] and 
+    <= smarange[1] will be affectd).
 
-	Parameters
+    Parameters
     ----------
     efit : dict or datautils.ListDataFrame[?]
-    	the ellipse-fit object to be updated
+        the ellipse-fit object to be updated
     
     colNameList : list or tuple of str
-    	list of column names to be updated
+        list of column names to be updated
 
     colValueList : list or tuple of float [or int or str?]
-    	list of values to be inserted into columns specified by names in colNameList
+        list of values to be inserted into columns specified by names in colNameList
     
     smarange : list, tuple, or numpy.ndarray of float
-    	2-element list of lower and upper semi-major axis limits; values in the
-    	specified columns outside this range will be left unchanged, values within
-    	this range will be replaced by the value specified in colValueList
-    	
+        2-element list of lower and upper semi-major axis limits; values in the
+        specified columns outside this range will be left unchanged, values within
+        this range will be replaced by the value specified in colValueList
+        
     Returns
     -------
     None
 
-	"""
-	
-	if "sma" in efit.keys():
-		# IRAF-style ellipse fit
-		a = efit['sma']
-	else:
-		# probably Bender-format ellipse fit
-		if 'a' in efit.keys():
-			a = efit['a']
-		elif 'r' in efit.keys():
-			a = efit['r']
-		else:
-			print("UNABLE TO FIND SMA COLUMN IN ELLIPSE-FIT DICTIONARY!")
-			return None
-	nRows = len(a)
-	N = len(colNameList)
-	
-	if smarange is not None:
-		amin = smarange[0]
-		amax = smarange[1]
-		iGood = [ i for i in range(nRows) if a[i] >= amin and a[i] <= amax ]
-	else:
-		iGood = range(nRows)
-		
-	for i in iGood:
-		for j in range(N):
-			efit[colNameList[j]][i] = colValueList[j]
+    """
+    
+    if "sma" in efit.keys():
+        # IRAF-style ellipse fit
+        a = efit['sma']
+    else:
+        # probably Bender-format ellipse fit
+        if 'a' in efit.keys():
+            a = efit['a']
+        elif 'r' in efit.keys():
+            a = efit['r']
+        else:
+            print("UNABLE TO FIND SMA COLUMN IN ELLIPSE-FIT DICTIONARY!")
+            return None
+    nRows = len(a)
+    N = len(colNameList)
+    
+    if smarange is not None:
+        amin = smarange[0]
+        amax = smarange[1]
+        iGood = [ i for i in range(nRows) if a[i] >= amin and a[i] <= amax ]
+    else:
+        iGood = range(nRows)
+        
+    for i in iGood:
+        for j in range(N):
+            efit[colNameList[j]][i] = colValueList[j]
 
 
 
 def MergeEllipseFits( efit1, efit2, transitionRadius ):
-	"""Merge two ellipse-fit dicts.
-	
-	Given two IRAF-style ellipse-fit dictionaries (efit1 and efit2), return a 
-	merged ellipse-fit dictionary where data from efit1 is used for a < transitionRadius
-	and data from efit2 is used for a > transitionRadius.
-	
-	Does NOT work with datautils.ListDataFrame objects!
-	
-	Parameters
+    """Merge two ellipse-fit dicts.
+    
+    Given two IRAF-style ellipse-fit dictionaries (efit1 and efit2), return a 
+    merged ellipse-fit dictionary where data from efit1 is used for a < transitionRadius
+    and data from efit2 is used for a > transitionRadius.
+    
+    Does NOT work with datautils.ListDataFrame objects!
+    
+    Parameters
     ----------
     efit1, efit2 : dicts
-    	dicts with ellipse-fit columns
+        dicts with ellipse-fit columns
     
     Returns
     -------
     merged_efit : dict
-    	dict with ellipse fit columns
-	"""
-	
-	if type(efit1) is du.ListDataFrame:
-		dataFrame = True
-		columnNameList = efit1.colNames
-	else:
-		dataFrame = False
-		columnNameList = efit1["column_list"]
-	a1 = efit1['sma']
-	a2 = efit2['sma']
-	n1 = len(a1)
-	n2 = len(a2)
-	# check for bad inputs
-	if (transitionRadius < a1[0]) or (transitionRadius > a1[-1]):
-		print("Requested transition radius (%g) is outside boundaries of efit1 (%g--%g)!" % (transitionRadius,
-					a1[0], a1[-1]))
-		return None
-	if (transitionRadius < a2[0]) or (transitionRadius > a2[-1]):
-		print("Requested transition radius (%g) is outside boundaries of efit2 (%g--%g)!" % (transitionRadius,
-					a2[0], a2[-1]))
-		return None
+        dict with ellipse fit columns
+    """
+    
+    if type(efit1) is du.ListDataFrame:
+        dataFrame = True
+        columnNameList = efit1.colNames
+    else:
+        dataFrame = False
+        columnNameList = efit1["column_list"]
+    a1 = efit1['sma']
+    a2 = efit2['sma']
+    n1 = len(a1)
+    n2 = len(a2)
+    # check for bad inputs
+    if (transitionRadius < a1[0]) or (transitionRadius > a1[-1]):
+        msg = "Requested transition radius ({0}) is outside".format(transitionRadius)
+        msg += " boundaries of efit1 ({0}-{1})!".format(a1[0], a1[-1])
+        print(msg)
+        return None
+    if (transitionRadius < a2[0]) or (transitionRadius > a2[-1]):
+        msg = "Requested transition radius ({0}) is outside".format(transitionRadius)
+        msg += " boundaries of efit2 ({0}-{1})!".format(a2[0], a2[-1])
+        print(msg)
+        return None
 
-	efit1_border = NearestIndex(a1, transitionRadius, noPrint=True)
-	efit2_border = NearestIndex(a2, transitionRadius, noPrint=True)
-	end1 = efit1_border[1]
-	start2 = efit2_border[1]
-	if (a2[start2] <= a1[end1]):
-		start2 += 1
-	
-	newDict = {}
-	for colName in columnNameList:
-		efit1vals = efit1[colName]
-		efit2vals = efit2[colName]
-		newDict[colName] = np.concatenate((efit1vals[0:end1], efit2vals[start2:]))
-	newDict["column_list"] = columnNameList
-	
-	if dataFrame is True:
-		frameList = []
-		for cname in columnNameList:
-			frameList.append(newDict[cname])
-		result = du.ListDataFrame(frameList, columnNameList)
-		# extra conveninces
-		result.AddColumnName("sma", "a")
-		result.AddColumnName("intens", "i")
-		result.sma_units = efit1.sma_units
-	else:
-		result = newDict
-	return result
+    efit1_border = NearestIndex(a1, transitionRadius, noPrint=True)
+    efit2_border = NearestIndex(a2, transitionRadius, noPrint=True)
+    end1 = efit1_border[1]
+    start2 = efit2_border[1]
+    if (a2[start2] <= a1[end1]):
+        start2 += 1
+    
+    newDict = {}
+    for colName in columnNameList:
+        efit1vals = efit1[colName]
+        efit2vals = efit2[colName]
+        newDict[colName] = np.concatenate((efit1vals[0:end1], efit2vals[start2:]))
+    newDict["column_list"] = columnNameList
+    
+    if dataFrame is True:
+        frameList = []
+        for cname in columnNameList:
+            frameList.append(newDict[cname])
+        result = du.ListDataFrame(frameList, columnNameList)
+        # extra conveninces
+        result.AddColumnName("sma", "a")
+        result.AddColumnName("intens", "i")
+        result.sma_units = efit1.sma_units
+    else:
+        result = newDict
+    return result
 
 
 
 def IntensityFromRadius( ellipseFit, radius, ZP=None ):
-	"""Returns or estimates ellipse-fit intensity at a given "radius" [semi-major axis].
-	
-	Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
-	user-specified "radius" (semi-major axis), this function extracts corresponding 
-	intensity level for the ellipse with that semi-major axis (using spline 
-	interpolation to get the intensity value if the radius  is not explicitly in the 
-	ellipse-fit object).
+    """Returns or estimates ellipse-fit intensity at a given "radius" [semi-major axis].
+    
+    Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
+    user-specified "radius" (semi-major axis), this function extracts corresponding 
+    intensity level for the ellipse with that semi-major axis (using spline 
+    interpolation to get the intensity value if the radius  is not explicitly in the 
+    ellipse-fit object).
 
-	Returns intensity (in counts/pixel), unless ZP is specified, in which
-	case the result is in magnitudes (if ZP converts counts/pixel to mag/arcsec^2,
-	the result is mag/arcsec^2).
-	
-	Parameters
+    Returns intensity (in counts/pixel), unless ZP is specified, in which
+    case the result is in magnitudes (if ZP converts counts/pixel to mag/arcsec^2,
+    the result is mag/arcsec^2).
+    
+    Parameters
     ----------
     ellipseFit : dict or datautils.ListDataFrame object
     
     radius : float or sequence of float
-    	radius (or list, tuple, or numpy.ndarray) specifying where to estimate intensity
+        radius (or list, tuple, or numpy.ndarray) specifying where to estimate intensity
     
     Returns
     -------
     result : float or numpy.ndarray
-    	Returns float if `radius` was float, numpy.ndarray otherwise
-	"""
-	
-	sma = np.array(ellipseFit['sma'])
-	badInput = False
-	if np.iterable(radius):
-		if (min(radius) < sma[0]) or (max(radius) > sma[-1]):
-			badInput = True
-			txt = "WARNING: requested radius array contains values outside"
-	elif (radius < sma[0]) or (radius > sma[-1]):
-		badInput = True
-		txt = "WARNING: requested radius (%g) is outside" % radius
-	if badInput:
-		txt += " ellipse-fit semi-major axis range (%g--%g)!" % (sma[0], sma[-1])
-		print(txt)
-		return None
-	
-	intensity = np.array(ellipseFit['intens'])
-	#intensity_spline_func = spline.Spline(sma, intensity)
-	intensity_spline = interpolate.InterpolatedUnivariateSpline(sma, intensity)
-	newIntensity = intensity_spline(radius)
-	if ZP is None:
-		return newIntensity
-	else:
-		return (ZP - 2.5*np.log10(newIntensity))
+        Returns float if `radius` was float, numpy.ndarray otherwise
+    """
+    
+    sma = np.array(ellipseFit['sma'])
+    badInput = False
+    if np.iterable(radius):
+        if (min(radius) < sma[0]) or (max(radius) > sma[-1]):
+            badInput = True
+            txt = "WARNING: requested radius array contains values outside"
+    elif (radius < sma[0]) or (radius > sma[-1]):
+        badInput = True
+        txt = "WARNING: requested radius ({0}) is outside".format(radius)
+    if badInput:
+        txt += " ellipse-fit semi-major axis range ({0}-{1})!".format(sma[0], sma[-1])
+        print(txt)
+        return None
+    
+    intensity = np.array(ellipseFit['intens'])
+    #intensity_spline_func = spline.Spline(sma, intensity)
+    intensity_spline = interpolate.InterpolatedUnivariateSpline(sma, intensity)
+    newIntensity = intensity_spline(radius)
+    if ZP is None:
+        return newIntensity
+    else:
+        return (ZP - 2.5*np.log10(newIntensity))
 
 
 def ValueFromRadius( ellipseFit, radius, value="pa" ):
-	"""Returns or estimates ellipse-fit value at a given "radius" [semi-major axis].
-	
-	Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
-	user-specified "radius" (semi-major axis), this function extracts the
-	corresponding parameter value for the ellipse with that semi-major axis 
-	(using spline interpolation to get the value if the radius is not explicitly 
-	in the ellipse-fit object).
+    """Returns or estimates ellipse-fit value at a given "radius" [semi-major axis].
+    
+    Given an ellipse-fit dictionary or datautils.ListDataFrame object and a 
+    user-specified "radius" (semi-major axis), this function extracts the
+    corresponding parameter value for the ellipse with that semi-major axis 
+    (using spline interpolation to get the value if the radius is not explicitly 
+    in the ellipse-fit object).
 
-	Parameters
+    Parameters
     ----------
     ellipseFit : dict or datautils.ListDataFrame object
     
     radius : float or sequence of float
-	    radius (or list, tuple, or numpy.ndarray) specifying where to estimate value
-	
-	value : str
-		column name within ellipseFit for which estimated value is desired
+        radius (or list, tuple, or numpy.ndarray) specifying where to estimate value
+    
+    value : str
+        column name within ellipseFit for which estimated value is desired
     
     Returns
     -------
     result : float or numpy.ndarray
-    	Returns float if `radius` was float, numpy.ndarray otherwise
-		value = string specifying which value to return (e.g., "ellip", "pa", etc.)
-	"""
-	
-	sma = np.array(ellipseFit['sma'])
-	badInput = False
-	if np.iterable(radius):
-		if (min(radius) < sma[0]) or (max(radius) > sma[-1]):
-			badInput = True
-			txt = "WARNING: requested radius array contains values outside"
-	elif (radius < sma[0]) or (radius > sma[-1]):
-		badInput = True
-		txt = "WARNING: requested radius (%g) is outside" % radius
-	if badInput:
-		txt += " ellipse-fit semi-major axis range (%g--%g)!" % (sma[0], sma[-1])
-		print(txt)
-		return None
-	
-	values = np.array(ellipseFit[value])
-	values_spline = interpolate.InterpolatedUnivariateSpline(sma, values)
-	newValue = values_spline(radius)
-	return newValue
+        Returns float if `radius` was float, numpy.ndarray otherwise
+        value = string specifying which value to return (e.g., "ellip", "pa", etc.)
+    """
+    
+    sma = np.array(ellipseFit['sma'])
+    badInput = False
+    if np.iterable(radius):
+        if (min(radius) < sma[0]) or (max(radius) > sma[-1]):
+            badInput = True
+            txt = "WARNING: requested radius array contains values outside"
+    elif (radius < sma[0]) or (radius > sma[-1]):
+        badInput = True
+        txt = "WARNING: requested radius ({0}) is outside".format(radius)
+    if badInput:
+        txt += " ellipse-fit semi-major axis range ({0}-{1})!".format(sma[0], sma[-1])
+        print(txt)
+        return None
+    
+    values = np.array(ellipseFit[value])
+    values_spline = interpolate.InterpolatedUnivariateSpline(sma, values)
+    newValue = values_spline(radius)
+    return newValue
 
 
 
 def GetIntensityReq( ellipseFit, mode="iraf" ):
-	"""
-	Returns tuple of (r_eq, intensities) from an ellipse-fit object.
-	
-	Given user-specified ellipse fit (defaults to iraf format, but mode="bender"
-	can be used to indicate a Bender/Saglia format), return tuple of equivalent radius
-	(r_eq = sqrt(a*b)) vector and intensities/surface-brightness vector (for iraf-
-	format ellipse fits, we return the intensities; for Bender/Saglia format, we
-	return the "surface brightness").
+    """
+    Returns tuple of (r_eq, intensities) from an ellipse-fit object.
+    
+    Given user-specified ellipse fit (defaults to iraf format, but mode="bender"
+    can be used to indicate a Bender/Saglia format), return tuple of equivalent radius
+    (r_eq = sqrt(a*b)) vector and intensities/surface-brightness vector (for iraf-
+    format ellipse fits, we return the intensities; for Bender/Saglia format, we
+    return the "surface brightness").
 
-	Parameters
+    Parameters
     ----------
     ellipseFit : dict or datautils.ListDataFrame object
     
     mode : {"iraf", "bender"}, optional
-	    Specifies the origin and format of the ellipse fit [default = "iraf"]
-	
+        Specifies the origin and format of the ellipse fit [default = "iraf"]
+    
     Returns
     -------
     (req, i_or_mu) : tuple of (numpy.ndarray, numpy.ndarry)
-    	req is array of r_eq values corresponding to semi-major axis values in
-    	input;
-		i_or_mu is array of corresponding intensities [if input was IRAF format] 
-		or surface-brightness values [if input was Bender format]
-	"""
-	
-	if mode == "iraf":
-		aKey = "sma"
-		ellKey = "ellip"
-		iKey = "intens"
-	elif mode == "bender":
-		aKey = "a"
-		ellKey = "eps"
-		iKey = "sb"
-	sma = np.array(ellipseFit[aKey])
-	ell = np.array(ellipseFit[ellKey])
-	i_or_mu = np.array(ellipseFit[iKey])
-	req = sma * np.sqrt(1.0 - ell)
-	return (req, i_or_mu)
+        req is array of r_eq values corresponding to semi-major axis values in
+        input;
+        i_or_mu is array of corresponding intensities [if input was IRAF format] 
+        or surface-brightness values [if input was Bender format]
+    """
+    
+    if mode == "iraf":
+        aKey = "sma"
+        ellKey = "ellip"
+        iKey = "intens"
+    elif mode == "bender":
+        aKey = "a"
+        ellKey = "eps"
+        iKey = "sb"
+    sma = np.array(ellipseFit[aKey])
+    ell = np.array(ellipseFit[ellKey])
+    i_or_mu = np.array(ellipseFit[iKey])
+    req = sma * np.sqrt(1.0 - ell)
+    return (req, i_or_mu)
 
 
 
 def GetStartParams( ellipseFit, a0=10, printCommand=False, useExactSma=False ):
-	"""
-	Extract the necessary start parameters for running doellipse: x0, y0, 
-	pa0, ell0 given the specified semi-major axis (default = 10 pixels).
+    """
+    Extract the necessary start parameters for running doellipse: x0, y0, 
+    pa0, ell0 given the specified semi-major axis (default = 10 pixels).
 
-	Parameters
+    Parameters
     ----------
     ellipseFit : dict or datautils.ListDataFrame
 
-	a0 : float, optional
-		optional starting semi-major axis [default = 10.0]
-	
-	printCommand: bool, optional
-		specifies that a sample command for the doellipse script should be
-		printed [default = False]
-	
-	useExactSma : bool, optional
-    	
+    a0 : float, optional
+        optional starting semi-major axis [default = 10.0]
+    
+    printCommand: bool, optional
+        specifies that a sample command for the doellipse script should be
+        printed [default = False]
+    
+    useExactSma : bool, optional
+        
     Returns
     -------
     (x0,y0,a00,pa0,ell0) : tuple of (float, float, float, float, float)
-    	tuple of starting parameters for running an ellipse fit, consisting of:
-    	x0, y0 = initial guess for ellipse center in pixel coordinates
-    	a00, pa0, ell0 = initial semi-major axis
-    	pa0, ell0 = initial guesses for ellipse position angle and ellipticity
-	"""
-	
-	doellipseTemplate = "doellipse xxx el_xxx {0} {1} {2} {3} {4}"
-	i0,i1 = NearestIndex(ellipseFit.a, a0, noPrint=True)
-	d1 = abs(ellipseFit.a[i0] - a0)
-	d2 = abs(ellipseFit.a[i1] - a0)
-	if (d1 < d2):
-		i = i0
-	else:
-		i = i1
-	
-	(x0,y0,a00,pa0,ell0) = (ellipseFit.x0[i], ellipseFit.y0[i], a0, 
-			ellipseFit.pa[i], ellipseFit.ellip[i])
-	if pa0 > 90:
-		pa0 = 90 - pa0
-	if useExactSma is True:
-		a00 = ellipseFit.a[i]
-	if printCommand is True:
-		txt = doellipseTemplate.format(x0,y0,a00,pa0,ell0)
-		print(txt)
-	return (x0,y0,a00,pa0,ell0)
-	
-	
+        tuple of starting parameters for running an ellipse fit, consisting of:
+        x0, y0 = initial guess for ellipse center in pixel coordinates
+        a00, pa0, ell0 = initial semi-major axis
+        pa0, ell0 = initial guesses for ellipse position angle and ellipticity
+    """
+    
+    doellipseTemplate = "doellipse xxx el_xxx {0} {1} {2} {3} {4}"
+    i0,i1 = NearestIndex(ellipseFit.a, a0, noPrint=True)
+    d1 = abs(ellipseFit.a[i0] - a0)
+    d2 = abs(ellipseFit.a[i1] - a0)
+    if (d1 < d2):
+        i = i0
+    else:
+        i = i1
+    
+    (x0,y0,a00,pa0,ell0) = (ellipseFit.x0[i], ellipseFit.y0[i], a0, 
+            ellipseFit.pa[i], ellipseFit.ellip[i])
+    if pa0 > 90:
+        pa0 = 90 - pa0
+    if useExactSma is True:
+        a00 = ellipseFit.a[i]
+    if printCommand is True:
+        txt = doellipseTemplate.format(x0,y0,a00,pa0,ell0)
+        print(txt)
+    return (x0,y0,a00,pa0,ell0)
+    
+    
 
 
 def WriteProfile( x, y, outputFilename ):
-	"""Take two input vectors x and y (integer or float) and write them 
-	to a text file:
-		   x    y
-	"""
-	
-	nX = len(x)
-	nY = len(y)
-	if (nX != nY):
-		msg = "WARNING: number of elements in x (%d) not same as number" % nX
-		msg += " of elements in y (%d)!\n" % nY
-		msg += "Nothing saved.\n"
-		print(msg)
-		return
-	nPts = min([nX, nY])
+    """Take two input vectors x and y (integer or float) and write them 
+    to a text file:
+           x    y
+    """
+    
+    nX = len(x)
+    nY = len(y)
+    if (nX != nY):
+        msg = "WARNING: number of elements in x ({0}) not same as number".format(nX)
+        msg += " of elements in y ({0})!\n".format(nY)
+        msg += "Nothing saved.\n"
+        print(msg)
+        return
+    nPts = min([nX, nY])
 
-	outf = open(outputFilename, 'w')
-	for i in xrange(nPts):
-		outf.write("%g\t\t%g\n" % (x[i], y[i]))
-	outf.close()
-	return
+    outf = open(outputFilename, 'w')
+    for i in xrange(nPts):
+        outf.write("{0}\t\t{1}\n".format(x[i], y[i]))
+    outf.close()
+    return
 
 
 
 def WriteProfileFromDict( dataDict, outputFilename ):
-	"""Take a data dictionary from an ellipse fit and save I(a) in a text file:
-		   a    I(a)
-	"""
-	
-	sma = dataDict["sma"]
-	I = dataDict["intens"]
-	WriteProfile(sma, I, outputFilename)
-	return
+    """Take a data dictionary from an ellipse fit and save I(a) in a text file:
+           a    I(a)
+    """
+    
+    sma = dataDict["sma"]
+    I = dataDict["intens"]
+    WriteProfile(sma, I, outputFilename)
+    return
 
 
 
 def NearestIndex( vector, value, noPrint=False, debug=False ):
-	"""Returns nearest two indices which bracket a specified value in a vector.
-	
-	Given an input list or numpy 1-D array, which is asumed to be monotonically 
-	increasing or decreasing, find the indices of the two points with values closest
-	to parameter 'value'.
+    """Returns nearest two indices which bracket a specified value in a vector.
+    
+    Given an input list or numpy 1-D array, which is asumed to be monotonically 
+    increasing or decreasing, find the indices of the two points with values closest
+    to parameter 'value'.
 
-	Parameters
+    Parameters
     ----------
     vector : sequence (list, tuple, numpy.ndarray) of float
 
-	value : float
-	
-	noPrint : bool, optional
-		if True, suppresses printout [default = False]
-	
-	debug : bool, optional
-		if True, prints extra debugging info
-    	
+    value : float
+    
+    noPrint : bool, optional
+        if True, suppresses printout [default = False]
+    
+    debug : bool, optional
+        if True, prints extra debugging info
+        
     Returns
     -------
     (i1, i2) : tuple of (int, int)
-		tuple of indices for vector which bracket input value
-	"""
-	
-	npts = len(vector)
-	
-	if (value < min(vector)) or (value > max(vector)):
-		if noPrint:
-			return (None, None)
-		else:
-			print("   value %f lies outside range of input vector (%g to %g)!" % \
-					(value, min(vector), max(vector)))
-			return None
-	
-	diff1 = vector[1] - vector[0]
-	if diff1 > 0:
-		# vector is increasing
-		Sign = 1
-	else:
-		# vector is decreasing
-		Sign = -1
-	i1 = i2 = 0
-	diff = Sign*(value - vector[0])
-	if debug: 
-		print(diff)
-	for i in range(1, npts):
-		newdiff = Sign*(value - vector[i])
-		if debug: 
-			print(i, newdiff)
-		if (newdiff > 0) and (newdiff <= diff):
-			diff = newdiff
-			i1 = i
-		else:
-			# we just crossed over
-			i2 = i
-			break
-	if noPrint is False:
-		print("   input_vector[%d,%d] = %g, %g" % (i1, i2, vector[i1], vector[i2]))
-	return (i1, i2)
+        tuple of indices for vector which bracket input value
+    """
+    
+    npts = len(vector)
+    
+    if (value < min(vector)) or (value > max(vector)):
+        if noPrint:
+            return (None, None)
+        else:
+            msg = "   value {0} lies outside range of input vector ({1} to {2})!".format(value,
+                    min(vector), max(vector))
+            print(msg)
+            return None
+    
+    diff1 = vector[1] - vector[0]
+    if diff1 > 0:
+        # vector is increasing
+        Sign = 1
+    else:
+        # vector is decreasing
+        Sign = -1
+    i1 = i2 = 0
+    diff = Sign*(value - vector[0])
+    if debug: 
+        print(diff)
+    for i in range(1, npts):
+        newdiff = Sign*(value - vector[i])
+        if debug: 
+            print(i, newdiff)
+        if (newdiff > 0) and (newdiff <= diff):
+            diff = newdiff
+            i1 = i
+        else:
+            # we just crossed over
+            i2 = i
+            break
+    if noPrint is False:
+        print("   input_vector[{0},{1}] = {2}, {3}".format(i1, i2, vector[i1], vector[i2]))
+    return (i1, i2)
 
 
 
 def WeightedFlux( dataDict ):
-	"""Given an input ellipse-fit stored in a dictionary, compute the approximate
-	total flux.
-	
-	
-	"""
-	
-	sma = dataDict["sma"]
-	I = dataDict["intens"]
-	ellipticity = dataDict["ellip"]
-	npts = len(sma)
-	
-	# start with flux inside innermost ellipse
-	innerFlux = dataDict["TFLUX_E"][0]
-	fluxSum = innerFlux
-	# now add up flux in elliptical annuli
-	for j in range(1, npts - 1):
-		dr = (sma[j + 1] - sma[j - 1])/2.0
-		# approximation to circumference of ellipse
-		a = sma[j]
-		b = a*(1.0 - ellipticity[j])
-		area = EllipseCircum(a,b) * dr
-		fluxSum += I[j]*area
-	# add outermost ellipse
-	dr = sma[npts - 1] - sma[npts - 2]
-	a = sma[npts - 1]
-	b = a*(1.0 - ellipticity[npts - 1])
-	area = EllipseCircum(a,b)
-	fluxSum += I[npts - 1]*area
-	
-	return fluxSum
+    """Given an input ellipse-fit stored in a dictionary, compute the approximate
+    total flux.
+    
+    
+    """
+    
+    sma = dataDict["sma"]
+    I = dataDict["intens"]
+    ellipticity = dataDict["ellip"]
+    npts = len(sma)
+    
+    # start with flux inside innermost ellipse
+    innerFlux = dataDict["TFLUX_E"][0]
+    fluxSum = innerFlux
+    # now add up flux in elliptical annuli
+    for j in range(1, npts - 1):
+        dr = (sma[j + 1] - sma[j - 1])/2.0
+        # approximation to circumference of ellipse
+        a = sma[j]
+        b = a*(1.0 - ellipticity[j])
+        area = EllipseCircum(a,b) * dr
+        fluxSum += I[j]*area
+    # add outermost ellipse
+    dr = sma[npts - 1] - sma[npts - 2]
+    a = sma[npts - 1]
+    b = a*(1.0 - ellipticity[npts - 1])
+    area = EllipseCircum(a,b)
+    fluxSum += I[npts - 1]*area
+    
+    return fluxSum
 
 
 
 def EquivRadius( dataDict ):
-	"""Computes equivalent radius based on semi-major axis and ellipticity.
-	
-	Given an input ellipse-fit stored in a dictionary, return a numpy array
-	of the equivalent radius [r_eq = sqrt(a*b)]."""
-	
-	try:
-		a = np.array(dataDict["sma"])
-	except KeyError:
-		# maybe it's a Bender-format ellipse fit
-		a = np.array(dataDict["a"])
-	try:
-		ellipticity = np.array(dataDict["ellip"])
-	except KeyError:
-		ellipticity = np.array(dataDict["eps"])
-		# maybe it's a Bender-format ellipse fit
-	b = (1.0 - ellipticity)*a
-	r_eq = np.sqrt(a*b)
-	return r_eq
+    """Computes equivalent radius based on semi-major axis and ellipticity.
+    
+    Given an input ellipse-fit stored in a dictionary, return a numpy array
+    of the equivalent radius [r_eq = sqrt(a*b)]."""
+    
+    try:
+        a = np.array(dataDict["sma"])
+    except KeyError:
+        # maybe it's a Bender-format ellipse fit
+        a = np.array(dataDict["a"])
+    try:
+        ellipticity = np.array(dataDict["ellip"])
+    except KeyError:
+        ellipticity = np.array(dataDict["eps"])
+        # maybe it's a Bender-format ellipse fit
+    b = (1.0 - ellipticity)*a
+    r_eq = np.sqrt(a*b)
+    return r_eq
 
 
 
@@ -1160,872 +1167,872 @@ def EquivRadius( dataDict ):
 # PLOTTING FUNCTIONS:
 
 def PlotValsErrors( efit, valName, smaName='sma', errSuffix="_err", xlog=False, 
-					ylog=False, xmark=None, xmarkColor=None, ymark=None, ymarkColor='k', 
-					plotColor="k", lw=1, smaScale=1.0, flipPA=None, plotErrors=True ):
-	"""Plot a parameter from an ellipse-fit object vs semi-major axis, with errorbars,
-	in a single plot.
-	
-	Plots a parameter from an ellipse fit, along with its errors, against
-	semi-major axis or similar value (default assumes that semi-major axis is 
-	accessed via efit['sma'], but user can specify a different key -- e.g., "req" --
-	via smaName). Intended to be called from within another ellipsefits function
-	(e.g., PlotEllPA).
+                    ylog=False, xmark=None, xmarkColor=None, ymark=None, ymarkColor='k', 
+                    plotColor="k", lw=1, smaScale=1.0, flipPA=None, plotErrors=True ):
+    """Plot a parameter from an ellipse-fit object vs semi-major axis, with errorbars,
+    in a single plot.
+    
+    Plots a parameter from an ellipse fit, along with its errors, against
+    semi-major axis or similar value (default assumes that semi-major axis is 
+    accessed via efit['sma'], but user can specify a different key -- e.g., "req" --
+    via smaName). Intended to be called from within another ellipsefits function
+    (e.g., PlotEllPA).
 
-	Parameters
+    Parameters
     ----------
-	efit : ellipse-fit dict or datautils.ListDataFrame object
-	
-	valName : str
-		specifies name of parameter (e.g., "ellip", "pa"); error is
-		assumed to be referenced by valName + errSuffix 
-	
-	smaName : str, optional
-		name for radius values (for x-axis; e.g., "sma", "req") [default = "sma"]
-	
-	errSuffix : str, optional
-		string specifying how error values are identified (i.e., errors
-		for valName are assumed to be identified by valName + errSuffix)
-		[default = "_err"]
-	
-	xlog : bool, optional
-		if True, then the semi-major axis is plotted in log space [default = False]
-	
-	ylog : bool, optional
-		if True, then the y axis is plotted in log space [default = False]
-	
-	xmark : float, sequence of float, or None, optional
-		Single number or list of numbers specifying semi-major-axis values
-		at which vertical dashed lines will be drawn (using plt.axvline).
+    efit : ellipse-fit dict or datautils.ListDataFrame object
+    
+    valName : str
+        specifies name of parameter (e.g., "ellip", "pa"); error is
+        assumed to be referenced by valName + errSuffix 
+    
+    smaName : str, optional
+        name for radius values (for x-axis; e.g., "sma", "req") [default = "sma"]
+    
+    errSuffix : str, optional
+        string specifying how error values are identified (i.e., errors
+        for valName are assumed to be identified by valName + errSuffix)
+        [default = "_err"]
+    
+    xlog : bool, optional
+        if True, then the semi-major axis is plotted in log space [default = False]
+    
+    ylog : bool, optional
+        if True, then the y axis is plotted in log space [default = False]
+    
+    xmark : float, sequence of float, or None, optional
+        Single number or list of numbers specifying semi-major-axis values
+        at which vertical dashed lines will be drawn (using plt.axvline).
 
-	xmarkColor : str, sequence of str, or None, optional
-		string defining single color in matplotlib style *or* a list/etc. of such 
-		strings, used to specify colors for drawling lines specified by xmark. 
-		If None, the color will default to plotColor [which itself defaults to 'k']
+    xmarkColor : str, sequence of str, or None, optional
+        string defining single color in matplotlib style *or* a list/etc. of such 
+        strings, used to specify colors for drawling lines specified by xmark. 
+        If None, the color will default to plotColor [which itself defaults to 'k']
 
-	ymark : float, sequence of float, or None, optional
-		single number or list of numbers; horizontal dashed lines will be drawn 
-		for the corresponding values (using plt.axhline).
-	
-	ymarkColor : str, sequence of str, or None, optional
-		As for xmarkColor, but specifying color(s) for ymark line(s).
+    ymark : float, sequence of float, or None, optional
+        single number or list of numbers; horizontal dashed lines will be drawn 
+        for the corresponding values (using plt.axhline).
+    
+    ymarkColor : str, sequence of str, or None, optional
+        As for xmarkColor, but specifying color(s) for ymark line(s).
 
-	plotColor : str or None, optional
-		matplotlib color specification for the data points, lines connecting them,
-		and errorbars [default = 'k']
-	
-	lw : float or None, optional
-		matplotlib linewidth specification for plotting the lines connecting
-		individual data points
+    plotColor : str or None, optional
+        matplotlib color specification for the data points, lines connecting them,
+        and errorbars [default = 'k']
+    
+    lw : float or None, optional
+        matplotlib linewidth specification for plotting the lines connecting
+        individual data points
 
-	smaScale : float or None, optional
-		conversion from the native semi-major-axis units of the ellipse-fit object 
-		(e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
-		for the x-axis.
+    smaScale : float or None, optional
+        conversion from the native semi-major-axis units of the ellipse-fit object 
+        (e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
+        for the x-axis.
 
-	flipPA : float or None, optional
-		If set, rearranges y-axis values so that y > flipPA are set negative; y values 
-		below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
-		If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
-		only for cases of plotting position angles.
-		[default = None]
-	
-	plotErrors : bool, optional
-		if True [default], then errorbars are plotted.
+    flipPA : float or None, optional
+        If set, rearranges y-axis values so that y > flipPA are set negative; y values 
+        below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
+        If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
+        only for cases of plotting position angles.
+        [default = None]
+    
+    plotErrors : bool, optional
+        if True [default], then errorbars are plotted.
 
     Returns
     -------
     None
-	"""
-	
-	valErrName = valName + errSuffix
-	a = smaScale * np.array(efit[smaName])
-	y = np.array(efit[valName])
-	y_err = np.array(efit[valErrName])
-	if flipPA is not None:
-		if flipPA >= 0:
-			makeNeg = y >= flipPA
-			y[makeNeg] = y[makeNeg] - 180.0
-		else:
-			makePos = y <= np.abs(flipPA)
-			y[makePos] = y[makePos] + 180.0
-	if xlog is True:
-		# make x-axis tick marks larger
-		plt.tick_params(axis="x", which="major", length=10)
-		plt.tick_params(axis="x", which="minor", length=5)
-	if xlog is True and ylog is False:
-		plt.semilogx(a, y, color=plotColor, lw=lw)
-	elif xlog is False and ylog is True:
-		plt.semilogy(a, y, color=plotColor, lw=lw)
-	elif xlog is True and ylog is True:
-		plt.loglog(a, y, color=plotColor, lw=lw)
-	else:
-		plt.plot(a, y, color=plotColor, lw=lw)
-	if plotErrors is True:
-		plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
-	else:
-		plt.plot(a, y, marker='o', color=plotColor, ms=3)
-	if xmark is not None:
-		if xmarkColor is None:
-			xmarkColor = plotColor
-		if type(xmark) in [int, float]:
-			plt.axvline(xmark, ls="--", color=xmarkColor)
-		else:
-			nXmarks = len(xmark)
-			if type(xmarkColor) is not list:
-				xmarkColors = [xmarkColor]*nXmarks
-			else:
-				xmarkColors = xmarkColor
-			for i in range(len(xmark)):
-				plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
-	if ymark is not None:
-		if type(ymark) in [int, float]:
-			plt.axhline(ymark, ls="--", color=ymarkColor)
-		else:
-			for y in ymark:
-				plt.axhline(y, ls="--", color=ymarkColor)
-	
-	if xlog is True:
-		MakeNiceLogAxes(whichAxis="x")
+    """
+    
+    valErrName = valName + errSuffix
+    a = smaScale * np.array(efit[smaName])
+    y = np.array(efit[valName])
+    y_err = np.array(efit[valErrName])
+    if flipPA is not None:
+        if flipPA >= 0:
+            makeNeg = y >= flipPA
+            y[makeNeg] = y[makeNeg] - 180.0
+        else:
+            makePos = y <= np.abs(flipPA)
+            y[makePos] = y[makePos] + 180.0
+    if xlog is True:
+        # make x-axis tick marks larger
+        plt.tick_params(axis="x", which="major", length=10)
+        plt.tick_params(axis="x", which="minor", length=5)
+    if xlog is True and ylog is False:
+        plt.semilogx(a, y, color=plotColor, lw=lw)
+    elif xlog is False and ylog is True:
+        plt.semilogy(a, y, color=plotColor, lw=lw)
+    elif xlog is True and ylog is True:
+        plt.loglog(a, y, color=plotColor, lw=lw)
+    else:
+        plt.plot(a, y, color=plotColor, lw=lw)
+    if plotErrors is True:
+        plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
+    else:
+        plt.plot(a, y, marker='o', color=plotColor, ms=3)
+    if xmark is not None:
+        if xmarkColor is None:
+            xmarkColor = plotColor
+        if type(xmark) in [int, float]:
+            plt.axvline(xmark, ls="--", color=xmarkColor)
+        else:
+            nXmarks = len(xmark)
+            if type(xmarkColor) is not list:
+                xmarkColors = [xmarkColor]*nXmarks
+            else:
+                xmarkColors = xmarkColor
+            for i in range(len(xmark)):
+                plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
+    if ymark is not None:
+        if type(ymark) in [int, float]:
+            plt.axhline(ymark, ls="--", color=ymarkColor)
+        else:
+            for y in ymark:
+                plt.axhline(y, ls="--", color=ymarkColor)
+    
+    if xlog is True:
+        MakeNiceLogAxes(whichAxis="x")
 
 
 
 def PlotHarmonicMomentErrors( efit, m, smaName='sma', errSuffix="_err", xlog=False, 
-					ylog=False, xmark=None, xmarkColor=None, plotColor="k", ymark=None, 
-					ymarkColor='k', smaScale=1.0, useSqrt=True ):
-	"""NOTE: calculation and plotting of error bars not yet implemented!
-	"""
-	a = smaScale * np.array(efit[smaName])
-	sinHarmonicName = "a%1d" % m
-	cosHarmonicName = "b%1d" % m
-	aVals = np.array(efit[sinHarmonicName])
-	bVals = np.array(efit[cosHarmonicName])
-	if useSqrt is True:
-		y = np.sqrt(aVals**2 + bVals**2)
-	else:
-		y = aVals**2 + bVals**2
+                    ylog=False, xmark=None, xmarkColor=None, plotColor="k", ymark=None, 
+                    ymarkColor='k', smaScale=1.0, useSqrt=True ):
+    """NOTE: calculation and plotting of error bars not yet implemented!
+    """
+    a = smaScale * np.array(efit[smaName])
+    sinHarmonicName = "a{0:1d}".format(m)
+    cosHarmonicName = "b{0:1d}".format(m)
+    aVals = np.array(efit[sinHarmonicName])
+    bVals = np.array(efit[cosHarmonicName])
+    if useSqrt is True:
+        y = np.sqrt(aVals**2 + bVals**2)
+    else:
+        y = aVals**2 + bVals**2
 
-	if xlog is True:
-		# make x-axis tick marks larger
-		plt.tick_params(axis="x", which="major", length=10)
-		plt.tick_params(axis="x", which="minor", length=5)
-	if xlog is True and ylog is False:
-		plt.semilogx(a, y, color=plotColor)
-	elif xlog is False and ylog is True:
-		plt.semilogy(a, y, color=plotColor)
-	elif xlog is True and ylog is True:
-		plt.loglog(a, y, color=plotColor)
-	else:
-		plt.plot(a, y, color=plotColor)
-#	plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
-	if xmark is not None:
-		if xmarkColor is None:
-			xmarkColor = plotColor
-		if type(xmark) in [int, float]:
-			plt.axvline(xmark, ls="--", color=xmarkColor)
-		else:
-			nXmarks = len(xmark)
-			if type(xmarkColor) is not list:
-				xmarkColors = [xmarkColor]*nXmarks
-			else:
-				xmarkColors = xmarkColor
-			for i in range(len(xmark)):
-				plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
-	if ymark is not None:
-		if type(ymark) in [int, float]:
-			plt.axhline(ymark, ls="--", color=ymarkColor)
-		else:
-			for y in ymark:
-				plt.axhline(y, ls="--", color=ymarkColor)
+    if xlog is True:
+        # make x-axis tick marks larger
+        plt.tick_params(axis="x", which="major", length=10)
+        plt.tick_params(axis="x", which="minor", length=5)
+    if xlog is True and ylog is False:
+        plt.semilogx(a, y, color=plotColor)
+    elif xlog is False and ylog is True:
+        plt.semilogy(a, y, color=plotColor)
+    elif xlog is True and ylog is True:
+        plt.loglog(a, y, color=plotColor)
+    else:
+        plt.plot(a, y, color=plotColor)
+#   plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
+    if xmark is not None:
+        if xmarkColor is None:
+            xmarkColor = plotColor
+        if type(xmark) in [int, float]:
+            plt.axvline(xmark, ls="--", color=xmarkColor)
+        else:
+            nXmarks = len(xmark)
+            if type(xmarkColor) is not list:
+                xmarkColors = [xmarkColor]*nXmarks
+            else:
+                xmarkColors = xmarkColor
+            for i in range(len(xmark)):
+                plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
+    if ymark is not None:
+        if type(ymark) in [int, float]:
+            plt.axhline(ymark, ls="--", color=ymarkColor)
+        else:
+            for y in ymark:
+                plt.axhline(y, ls="--", color=ymarkColor)
 
 
 def PlotEllPA( efit, xlog=False, xrange=None, parange=None, erange=None,
-				xmark=None, xmarkColor=None, pamark=None, ellmark=None, 
-				merge=False, maintitle=None, xtitle=None, 
-				plotColorList=['k','r','g','b'], lwList=[1,1,1,1],
-				labelSize=12, removeExtra=False, flipPA=None, smaScale=1.0,
-				plotErrors=True, plotq=False, useReq=False, noErase=False ):
-	"""Plot position angle and ellipticity (or axis ratio) as function of semi-major axis
-	(or r_eq) for one or more ellipse fits
-	
-	This function draws a combined plot of position angle and ellipticity (or axis
-	ratio) for one or more ellipse-fit objects, with PA in upper panel and 
-	ellipticity/axis ratio in lower panel, versus semi-major axis (or equivalent
-	radius r_eq). 
-	
-		efit can be a single ellipse-fit object [generated by ReadEllipse] or a list 
-	of such objects.
-	
-	Parameters
+                xmark=None, xmarkColor=None, pamark=None, ellmark=None, 
+                merge=False, maintitle=None, xtitle=None, 
+                plotColorList=['k','r','g','b'], lwList=[1,1,1,1],
+                labelSize=12, removeExtra=False, flipPA=None, smaScale=1.0,
+                plotErrors=True, plotq=False, useReq=False, noErase=False ):
+    """Plot position angle and ellipticity (or axis ratio) as function of semi-major axis
+    (or r_eq) for one or more ellipse fits
+    
+    This function draws a combined plot of position angle and ellipticity (or axis
+    ratio) for one or more ellipse-fit objects, with PA in upper panel and 
+    ellipticity/axis ratio in lower panel, versus semi-major axis (or equivalent
+    radius r_eq). 
+    
+        efit can be a single ellipse-fit object [generated by ReadEllipse] or a list 
+    of such objects.
+    
+    Parameters
     ----------
-	efit : ellipse-fit object or list of same
-	
-	xlog : bool, optional
-		if True, then the semi-major axis is plotted in log space [default = False]
-	
-	xrange : 2-element sequence of float
-		lower and upper limits for plot range of x-axis (semi-major axis)
+    efit : ellipse-fit object or list of same
+    
+    xlog : bool, optional
+        if True, then the semi-major axis is plotted in log space [default = False]
+    
+    xrange : 2-element sequence of float
+        lower and upper limits for plot range of x-axis (semi-major axis)
 
-	parange : 2-element sequence of float
-		lower and upper limits for plot range of y-axis for position-angle subplot
-	
-	erange : 2-element sequence of float
-		lower and upper limits for plot range of y-axis for ellipticity subplot
-	
-	xmark : float, sequence of float, or None, optional
-		Single number or list of numbers specifying semi-major-axis values
-		at which vertical dashed lines will be drawn (using plt.axvline).
+    parange : 2-element sequence of float
+        lower and upper limits for plot range of y-axis for position-angle subplot
+    
+    erange : 2-element sequence of float
+        lower and upper limits for plot range of y-axis for ellipticity subplot
+    
+    xmark : float, sequence of float, or None, optional
+        Single number or list of numbers specifying semi-major-axis values
+        at which vertical dashed lines will be drawn (using plt.axvline).
 
-	xmarkColor : str, sequence of str, or None, optional
-		string defining single color in matplotlib style *or* a list/etc. of such 
-		strings, used to specify colors for drawling lines specified by xmark. 
-		If None, the color will default to plotColor [which itself defaults to 'k']
+    xmarkColor : str, sequence of str, or None, optional
+        string defining single color in matplotlib style *or* a list/etc. of such 
+        strings, used to specify colors for drawling lines specified by xmark. 
+        If None, the color will default to plotColor [which itself defaults to 'k']
 
-	pamark : float, sequence of float, or None, optional
-		single number or list of numbers specifying position angles; horizontal 
-		dashed lines will be drawn for the specified values (using plt.axhline)
-		in the PA subplot.
+    pamark : float, sequence of float, or None, optional
+        single number or list of numbers specifying position angles; horizontal 
+        dashed lines will be drawn for the specified values (using plt.axhline)
+        in the PA subplot.
 
-	pamark : float, sequence of float, or None, optional
-		single number or list of numbers specifying ellipticities; horizontal 
-		dashed lines will be drawn for the specified values (using plt.axhline)
-		in the ellipticity subplot.
-	
-	merge : bool, optional
-		Merges PA and ellipticity subplots vertically, so they share a common x-axis
-		with x-axis labels only at the bottom of the ellipticity subplot.
-		[default = False]
-	
-	mainTitle : str or None, optional
-		Optional title for the combined plot (will appear on top of PA subplot).
-		
-	xTitle : str or None, optional
-		Alternate x-axis label [default = None, which produces a default x-axis label
-		of "Semi-major axis [<unit_name>]", where <unit_name> is the unit associated
-		with the semi-major-axis column of the first ellipse-fit object.
-		
-	plotColorList : sequence of str, optional
-		matplotlib color specifications for the ellipse-fit objects, lines connecting
-		them, and errorbars, with ordering same as in efit.
-	
-	lwList : sequence of float, optional
-		matplotlib linewidth specification for plotting the lines connecting
-		individual data points, with same ordering as in efit
+    pamark : float, sequence of float, or None, optional
+        single number or list of numbers specifying ellipticities; horizontal 
+        dashed lines will be drawn for the specified values (using plt.axhline)
+        in the ellipticity subplot.
+    
+    merge : bool, optional
+        Merges PA and ellipticity subplots vertically, so they share a common x-axis
+        with x-axis labels only at the bottom of the ellipticity subplot.
+        [default = False]
+    
+    mainTitle : str or None, optional
+        Optional title for the combined plot (will appear on top of PA subplot).
+        
+    xTitle : str or None, optional
+        Alternate x-axis label [default = None, which produces a default x-axis label
+        of "Semi-major axis [<unit_name>]", where <unit_name> is the unit associated
+        with the semi-major-axis column of the first ellipse-fit object.
+        
+    plotColorList : sequence of str, optional
+        matplotlib color specifications for the ellipse-fit objects, lines connecting
+        them, and errorbars, with ordering same as in efit.
+    
+    lwList : sequence of float, optional
+        matplotlib linewidth specification for plotting the lines connecting
+        individual data points, with same ordering as in efit
 
-	labelSize : float, optional
-		matplotlib point size for axis labels [default = 12]
-	
-	removeExtra : bool, optional
-		XXX
-		
-	smaScale : float or None, optional
-		conversion from the native semi-major-axis units of the ellipse-fit object 
-		(e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
-		for the x-axis.
+    labelSize : float, optional
+        matplotlib point size for axis labels [default = 12]
+    
+    removeExtra : bool, optional
+        XXX
+        
+    smaScale : float or None, optional
+        conversion from the native semi-major-axis units of the ellipse-fit object 
+        (e.g., arc seconds or pixels) to desired linear scale (e.g., parsecs or kpc) 
+        for the x-axis.
 
-	flipPA : float or None, optional
-		If set, rearranges y-axis values so that y > flipPA are set negative; y values 
-		below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
-		If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
-		only for cases of plotting position angles.
-		[default = None]
-	
-	plotErrors : bool, optional
-		if True [default], then errorbars are plotted.
+    flipPA : float or None, optional
+        If set, rearranges y-axis values so that y > flipPA are set negative; y values 
+        below flipPA are unchanged (useful for those cases when PA wraps around past 180).  
+        If flipPA < 0, then values of y < abs(flipPA) have 180 added to them. Meant
+        only for cases of plotting position angles.
+        [default = None]
+    
+    plotErrors : bool, optional
+        if True [default], then errorbars are plotted.
 
-	plotq : bool, optional
-		if True, then axis ratio q (= b/a) is plotted instead of ellipticity in the
-		ellipticity plot [default = False]
-	
-	useReq : bool, optional
-		if True, then PA and ellipticity are plotted against r_eq [sqrt(a*b)] instead
-		of semi-major axis. [default = False]
-	
-	noErase : bool, optional
-		if True, then a plot.clf() command is *not* issued prior to making the plot.
-		[default = False]
-	
+    plotq : bool, optional
+        if True, then axis ratio q (= b/a) is plotted instead of ellipticity in the
+        ellipticity plot [default = False]
+    
+    useReq : bool, optional
+        if True, then PA and ellipticity are plotted against r_eq [sqrt(a*b)] instead
+        of semi-major axis. [default = False]
+    
+    noErase : bool, optional
+        if True, then a plot.clf() command is *not* issued prior to making the plot.
+        [default = False]
+    
     Returns
     -------
     None
-	"""
-	
-	if isinstance(efit, list):
-		nEfits = len(efit)
-		plotList = True
-	else:
-		plotList = False
+    """
+    
+    if isinstance(efit, list):
+        nEfits = len(efit)
+        plotList = True
+    else:
+        plotList = False
 
-	# are we plotting ellipticity or axis ratio?
-	if plotq is True:
-		yLabelEllip = r"Axis ratio $q = b/a$"
-		yValEllip = "q"
-	else:
-		yLabelEllip = r"Ellipticity = $1 - b/a$"
-		yValEllip = "ellip"
-	# are we plotting versus semi-major axis or r_eq?
-	if useReq is True:
-		xLabelBase = r"Equivalent radius $r_{\rm eq}$ ["
-		xValName = "req"
-	else:
-		xLabelBase = "Semi-major axis ["
-		xValName = "sma"
-	if xtitle is None:
-		if plotList:
-			unitName = efit[0].sma_units
-		else:
-			unitName = efit.sma_units
-		xLabelString = xLabelBase + unitName + "]"
-	else:
-		xLabelString = xtitle
+    # are we plotting ellipticity or axis ratio?
+    if plotq is True:
+        yLabelEllip = r"Axis ratio $q = b/a$"
+        yValEllip = "q"
+    else:
+        yLabelEllip = r"Ellipticity = $1 - b/a$"
+        yValEllip = "ellip"
+    # are we plotting versus semi-major axis or r_eq?
+    if useReq is True:
+        xLabelBase = r"Equivalent radius $r_{\rm eq}$ ["
+        xValName = "req"
+    else:
+        xLabelBase = "Semi-major axis ["
+        xValName = "sma"
+    if xtitle is None:
+        if plotList:
+            unitName = efit[0].sma_units
+        else:
+            unitName = efit.sma_units
+        xLabelString = xLabelBase + unitName + "]"
+    else:
+        xLabelString = xtitle
 
-		
-	if noErase is False:
-		plt.clf()
-	
-	if merge is True:
-		ax1 = plt.axes([0.2, 0.5, 0.6, 0.4])
-		if not plotList:
-			PlotValsErrors(efit, "pa", smaName=xValName, xlog=xlog, xmark=xmark, ymark=pamark, 
-							flipPA=flipPA, lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], "pa", smaName=xValName, xlog=xlog, xmark=xmark, 
-							ymark=pamark, flipPA=flipPA, plotColor=plotColorList[i], 
-							lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
-		plt.ylabel("Position Angle", fontsize=labelSize)
-		# suppress x-axis labels for upper plot
-		ax1.set_xticklabels([])
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (parange is not None):
-			plt.ylim(parange[0], parange[1])
-		if maintitle is not None:
-			plt.title(maintitle)
-		
-		ax2 = plt.axes([0.2, 0.1, 0.6, 0.4])
-		if not plotList:
-			PlotValsErrors(efit, yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
-							ymark=ellmark, lw=lwList[0], smaScale=smaScale, 
-							plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
-								ymark=ellmark, plotColor=plotColorList[i], lw=lwList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (erange is not None):
-			plt.ylim(erange[0], erange[1])
-		else:
-			ylimits = plt.ylim()
-			if ylimits[0] < 0:
-				ylimits = (0, ylimits[1])
-				plt.ylim(ylimits)
-		plt.xlabel(xLabelString, fontsize=labelSize)
-		plt.ylabel(yLabelEllip, fontsize=labelSize)
+        
+    if noErase is False:
+        plt.clf()
+    
+    if merge is True:
+        ax1 = plt.axes([0.2, 0.5, 0.6, 0.4])
+        if not plotList:
+            PlotValsErrors(efit, "pa", smaName=xValName, xlog=xlog, xmark=xmark, ymark=pamark, 
+                            flipPA=flipPA, lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], "pa", smaName=xValName, xlog=xlog, xmark=xmark, 
+                            ymark=pamark, flipPA=flipPA, plotColor=plotColorList[i], 
+                            lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
+        plt.ylabel("Position Angle", fontsize=labelSize)
+        # suppress x-axis labels for upper plot
+        ax1.set_xticklabels([])
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (parange is not None):
+            plt.ylim(parange[0], parange[1])
+        if maintitle is not None:
+            plt.title(maintitle)
+        
+        ax2 = plt.axes([0.2, 0.1, 0.6, 0.4])
+        if not plotList:
+            PlotValsErrors(efit, yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
+                            ymark=ellmark, lw=lwList[0], smaScale=smaScale, 
+                            plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
+                                ymark=ellmark, plotColor=plotColorList[i], lw=lwList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (erange is not None):
+            plt.ylim(erange[0], erange[1])
+        else:
+            ylimits = plt.ylim()
+            if ylimits[0] < 0:
+                ylimits = (0, ylimits[1])
+                plt.ylim(ylimits)
+        plt.xlabel(xLabelString, fontsize=labelSize)
+        plt.ylabel(yLabelEllip, fontsize=labelSize)
 
-		# Final cleanups:
-		# somewhat kludgy way of suppressing the topmost y-axis tick label on the lower plot
-		ylocs2 = ax2.get_yticks()
-		new_labels2 = [str(yloc) for yloc in ylocs2]
-		new_labels2[-1] = ""
-		if removeExtra is True:
-			new_labels2[-2] = ""
-		ax2.set_yticklabels(new_labels2)
+        # Final cleanups:
+        # somewhat kludgy way of suppressing the topmost y-axis tick label on the lower plot
+        ylocs2 = ax2.get_yticks()
+        new_labels2 = [str(yloc) for yloc in ylocs2]
+        new_labels2[-1] = ""
+        if removeExtra is True:
+            new_labels2[-2] = ""
+        ax2.set_yticklabels(new_labels2)
 
-	else:
-		plt.subplot(211)
-		if not plotList:
-			PlotValsErrors(efit, "pa", xlog=xlog, smaName=xValName, xmark=xmark, ymark=pamark, 
-							flipPA=flipPA, lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], "pa", xlog=xlog, smaName=xValName, xmark=xmark, 
-								ymark=pamark, flipPA=flipPA, plotColor=plotColorList[i], 
-								lw=lwList[i], smaScale=smaScale, plotErrors=plotErrors)
-		plt.ylabel("Position Angle", fontsize=labelSize)
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (parange is not None):
-			plt.ylim(parange[0], parange[1])
-		else:
-			ylimits0,ylimits1 = plt.ylim()
-			if ylimits0 < -100:
-				ylimits0 = -100.0
-			if ylimits1 > 300:
-				ylimits1 = 300.0
-				plt.ylim(ylimits0,ylimits1)
-		if maintitle is not None:
-			plt.title(maintitle)
-		
-		plt.subplot(212)
-		if not plotList:
-			PlotValsErrors(efit, yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
-							ymark=ellmark, lw=lwList[0], smaScale=smaScale, 
-							plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
-								ymark=ellmark, plotColor=plotColorList[i], lw=lwList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (erange is not None):
-			plt.ylim(erange[0], erange[1])
-		else:
-			ylimits = plt.ylim()
-			if ylimits[0] < 0:
-				ylimits = (0, ylimits[1])
-				plt.ylim(ylimits)
-		plt.xlabel(xLabelString, fontsize=labelSize)
-		plt.ylabel(yLabelEllip, fontsize=labelSize)
-	
+    else:
+        plt.subplot(211)
+        if not plotList:
+            PlotValsErrors(efit, "pa", xlog=xlog, smaName=xValName, xmark=xmark, ymark=pamark, 
+                            flipPA=flipPA, lw=lwList[0], smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], "pa", xlog=xlog, smaName=xValName, xmark=xmark, 
+                                ymark=pamark, flipPA=flipPA, plotColor=plotColorList[i], 
+                                lw=lwList[i], smaScale=smaScale, plotErrors=plotErrors)
+        plt.ylabel("Position Angle", fontsize=labelSize)
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (parange is not None):
+            plt.ylim(parange[0], parange[1])
+        else:
+            ylimits0,ylimits1 = plt.ylim()
+            if ylimits0 < -100:
+                ylimits0 = -100.0
+            if ylimits1 > 300:
+                ylimits1 = 300.0
+                plt.ylim(ylimits0,ylimits1)
+        if maintitle is not None:
+            plt.title(maintitle)
+        
+        plt.subplot(212)
+        if not plotList:
+            PlotValsErrors(efit, yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
+                            ymark=ellmark, lw=lwList[0], smaScale=smaScale, 
+                            plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], yValEllip, smaName=xValName, xlog=xlog, xmark=xmark, 
+                                ymark=ellmark, plotColor=plotColorList[i], lw=lwList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (erange is not None):
+            plt.ylim(erange[0], erange[1])
+        else:
+            ylimits = plt.ylim()
+            if ylimits[0] < 0:
+                ylimits = (0, ylimits[1])
+                plt.ylim(ylimits)
+        plt.xlabel(xLabelString, fontsize=labelSize)
+        plt.ylabel(yLabelEllip, fontsize=labelSize)
+    
 
 def GetMaxHarmonic( efit ):
-	"""Determine highest-order of harmonic amplitudes in an ellipse-fit object"""
-	
-	# We assume that columns named "ai3_err", "ai4_err", "ai5_err", etc.
-	# exist, up to "aiM_err", where M is the maximum harmonic number
-	momentNums = [int(cname.rstrip("_err")[2:]) for cname in efit.colNames 
-					if cname[:2] == "ai" and cname[-4:] == "_err"]
-	return max(momentNums)
-	
-	
+    """Determine highest-order of harmonic amplitudes in an ellipse-fit object"""
+    
+    # We assume that columns named "ai3_err", "ai4_err", "ai5_err", etc.
+    # exist, up to "aiM_err", where M is the maximum harmonic number
+    momentNums = [int(cname.rstrip("_err")[2:]) for cname in efit.colNames 
+                    if cname[:2] == "ai" and cname[-4:] == "_err"]
+    return max(momentNums)
+    
+    
 def PlotHigher( efit, m=4, xlog=False, xrange=None, arange=None, brange=None,
-				xmark=None, xmarkColor=None, merge=False, symlogy=False,
-				maintitle=None, xtitle=None, plotColorList=['k', 'r', 'g', 'b'],
-				noErase=False, plotErrors=True, labelSize=12, smaScale=1.0  ):
-	"""Plot harmonic amplitudes as function of semi-major axis (or r_eq) for one or 
-	more ellipse fits
-	
-	Plots higher-order harmonics (e.g., A_4 and B_4) for one or more ellipse-fit
-	objects, with A_m in upper panel and B_m in lower panel.  Meant for use with IRAF
-	ellipse fits.  
-		Defaults to m=4.
-	
-		efit: single ellipse-fit object [generated by ReadEllipse] or a list of same.
-		m: order of the harmonics to plot [default = 4]
-		xmark: can be a single number or a list of numbers; vertical dashed
-	lines will be drawn at the corresponding semi-major axis value(s).
-		xmarkColor: optional string defining single color in matplotlib style *or* 
-	a list of such strings. If nothing is supplied for this, it will default to 
-	plotColor [which itself defaults to 'k']
-		plotColorList: optional list of color specifications for use when plotting
-	a list of ellipse-fit objects.
-		labelSize: sizes of x- and y-axis labels (in points)
-		
-		smaScale = conversion from arc seconds (or pixel) to desired linear scale
-	(e.g., parsecs or kpc) for the x-axis.
-	"""
-	
-	
-	if isinstance(efit, list):
-		nEfits = len(efit)
-		plotList = True
-	else:
-		plotList = False
+                xmark=None, xmarkColor=None, merge=False, symlogy=False,
+                maintitle=None, xtitle=None, plotColorList=['k', 'r', 'g', 'b'],
+                noErase=False, plotErrors=True, labelSize=12, smaScale=1.0  ):
+    """Plot harmonic amplitudes as function of semi-major axis (or r_eq) for one or 
+    more ellipse fits
+    
+    Plots higher-order harmonics (e.g., A_4 and B_4) for one or more ellipse-fit
+    objects, with A_m in upper panel and B_m in lower panel.  Meant for use with IRAF
+    ellipse fits.  
+        Defaults to m=4.
+    
+        efit: single ellipse-fit object [generated by ReadEllipse] or a list of same.
+        m: order of the harmonics to plot [default = 4]
+        xmark: can be a single number or a list of numbers; vertical dashed
+    lines will be drawn at the corresponding semi-major axis value(s).
+        xmarkColor: optional string defining single color in matplotlib style *or* 
+    a list of such strings. If nothing is supplied for this, it will default to 
+    plotColor [which itself defaults to 'k']
+        plotColorList: optional list of color specifications for use when plotting
+    a list of ellipse-fit objects.
+        labelSize: sizes of x- and y-axis labels (in points)
+        
+        smaScale = conversion from arc seconds (or pixel) to desired linear scale
+    (e.g., parsecs or kpc) for the x-axis.
+    """
+    
+    
+    if isinstance(efit, list):
+        nEfits = len(efit)
+        plotList = True
+    else:
+        plotList = False
 
-	if (m < 3):
-		print("*** WARNING: m < 3 harmonic components do not exist! ***")
-		return None
-	if plotList:
-		mMax = GetMaxHarmonic(efit[0])
-	else:
-		mMax = GetMaxHarmonic(efit)
-	if m > mMax:
-		txt = "*** WARNING: m = %d requested, but ellipse-fit object only has" % m
-		txt += " harmonic amplitudes up to m = %d! ***" % mMax
-		print(txt)
-		return None
-	sinHarmonicName = "a%1d" % m
-	sinHarmonicLabel = "A%1d" % m
-	cosHarmonicName = "b%1d" % m
-	if (m == 4):
-		cosHarmonicLabel = r"[boxy] -- B4 -- [disky]"
-	else:
-		cosHarmonicLabel = "B%1d" % m
-	if xtitle is None:
-		if plotList:
-			unitName = efit[0].sma_units
-		else:
-			unitName = efit.sma_units
-		xLabelString = "Semi-major axis [" + unitName + "]"
-	else:
-		xLabelString = xtitle
+    if (m < 3):
+        print("*** WARNING: m < 3 harmonic components do not exist! ***")
+        return None
+    if plotList:
+        mMax = GetMaxHarmonic(efit[0])
+    else:
+        mMax = GetMaxHarmonic(efit)
+    if m > mMax:
+        txt = "*** WARNING: m = {0} requested, but ellipse-fit object only has".format(m)
+        txt += " harmonic amplitudes up to m = {0}! ***".format(mMax)
+        print(txt)
+        return None
+    sinHarmonicName = "a{0:1d}".format(m)
+    sinHarmonicLabel = "A{0:1d}".format(m)
+    cosHarmonicName = "b{0:1d}".format(m)
+    if (m == 4):
+        cosHarmonicLabel = r"[boxy] -- B4 -- [disky]"
+    else:
+        cosHarmonicLabel = "B{0:1d}".format(m)
+    if xtitle is None:
+        if plotList:
+            unitName = efit[0].sma_units
+        else:
+            unitName = efit.sma_units
+        xLabelString = "Semi-major axis [" + unitName + "]"
+    else:
+        xLabelString = xtitle
 
-	if noErase is False:
-		plt.clf()
+    if noErase is False:
+        plt.clf()
 
-	if merge is True:
-		ax1 = plt.axes([0.2, 0.5, 0.6, 0.4])
-		if not plotList:
-			PlotValsErrors(efit, sinHarmonicName, xlog=xlog, xmark=xmark, 
-							xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], sinHarmonicName, xlog=xlog, xmark=xmark,
-								xmarkColor=xmarkColor, plotColor=plotColorList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		plt.ylabel(sinHarmonicLabel, fontsize=labelSize)
-		# suppress x-axis labels for upper plot
-		ax1.set_xticklabels([])
-		plt.axhline(0)
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (arange is not None):
-			plt.ylim(arange[0], arange[1])
-		if maintitle is not None:
-			plt.title(maintitle)
-		if symlogy is True:
-			plt.yscale('symlog', linthreshy=0.01)
+    if merge is True:
+        ax1 = plt.axes([0.2, 0.5, 0.6, 0.4])
+        if not plotList:
+            PlotValsErrors(efit, sinHarmonicName, xlog=xlog, xmark=xmark, 
+                            xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], sinHarmonicName, xlog=xlog, xmark=xmark,
+                                xmarkColor=xmarkColor, plotColor=plotColorList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        plt.ylabel(sinHarmonicLabel, fontsize=labelSize)
+        # suppress x-axis labels for upper plot
+        ax1.set_xticklabels([])
+        plt.axhline(0)
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (arange is not None):
+            plt.ylim(arange[0], arange[1])
+        if maintitle is not None:
+            plt.title(maintitle)
+        if symlogy is True:
+            plt.yscale('symlog', linthreshy=0.01)
 
-		ax2 = plt.axes([0.2, 0.1, 0.6, 0.4])
-		if not plotList:
-			PlotValsErrors(efit, cosHarmonicName, xlog=xlog, xmark=xmark, 
-							xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], cosHarmonicName, xlog=xlog, xmark=xmark,
-								xmarkColor=xmarkColor, plotColor=plotColorList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		plt.axhline(0)
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (brange is not None):
-			plt.ylim(brange[0], brange[1])
-		plt.ylabel(cosHarmonicLabel, fontsize=labelSize)
-		plt.xlabel(xLabelString, fontsize=labelSize)
-		if symlogy is True:
-			plt.yscale('symlog', linthreshy=0.01)
-		
-		# Final cleanups:
-		# somewhat kludgy way of suppressing the topmost y-axis tick label on the lower plot
-		ylocs2 = ax2.get_yticks()
-		new_labels2 = [str(yloc) for yloc in ylocs2]
-		new_labels2[-1] = ""
-		new_labels2[-2] = ""
-		ax2.set_yticklabels(new_labels2)
+        ax2 = plt.axes([0.2, 0.1, 0.6, 0.4])
+        if not plotList:
+            PlotValsErrors(efit, cosHarmonicName, xlog=xlog, xmark=xmark, 
+                            xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], cosHarmonicName, xlog=xlog, xmark=xmark,
+                                xmarkColor=xmarkColor, plotColor=plotColorList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        plt.axhline(0)
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (brange is not None):
+            plt.ylim(brange[0], brange[1])
+        plt.ylabel(cosHarmonicLabel, fontsize=labelSize)
+        plt.xlabel(xLabelString, fontsize=labelSize)
+        if symlogy is True:
+            plt.yscale('symlog', linthreshy=0.01)
+        
+        # Final cleanups:
+        # somewhat kludgy way of suppressing the topmost y-axis tick label on the lower plot
+        ylocs2 = ax2.get_yticks()
+        new_labels2 = [str(yloc) for yloc in ylocs2]
+        new_labels2[-1] = ""
+        new_labels2[-2] = ""
+        ax2.set_yticklabels(new_labels2)
 
-	else:
-		plt.subplot(211)
-		if not plotList:
-			PlotValsErrors(efit, sinHarmonicName, xlog=xlog, xmark=xmark, 
-							xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], sinHarmonicName, xlog=xlog, xmark=xmark,
-								xmarkColor=xmarkColor, plotColor=plotColorList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		if xrange is None:
-			xrange = plt.xlim()
-		plt.ylabel(sinHarmonicLabel, fontsize=labelSize)
-		plt.plot([xrange[0], xrange[1]], [0,0], 'k')
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (arange is not None):
-			plt.ylim(arange[0], arange[1])
-		if maintitle is not None:
-			plt.title(maintitle)
-		if symlogy is True:
-			plt.yscale('symlog', linthreshy=0.01)
-		
-		plt.subplot(212)
-		if not plotList:
-			PlotValsErrors(efit, cosHarmonicName, xlog=xlog, xmark=xmark, 
-							xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
-		else:
-			for i in range(nEfits):
-				PlotValsErrors(efit[i], cosHarmonicName, xlog=xlog, xmark=xmark,
-								xmarkColor=xmarkColor, plotColor=plotColorList[i], 
-								smaScale=smaScale, plotErrors=plotErrors)
-		plt.plot([xrange[0], xrange[1]], [0,0], 'k')
-		if (xrange is not None):
-			plt.xlim(xrange[0], xrange[1])
-		if (brange is not None):
-			plt.ylim(brange[0], brange[1])
-		plt.ylabel(cosHarmonicLabel, fontsize=labelSize)
-		plt.xlabel(xLabelString, fontsize=labelSize)
-		if symlogy is True:
-			plt.yscale('symlog', linthreshy=0.01)
+    else:
+        plt.subplot(211)
+        if not plotList:
+            PlotValsErrors(efit, sinHarmonicName, xlog=xlog, xmark=xmark, 
+                            xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], sinHarmonicName, xlog=xlog, xmark=xmark,
+                                xmarkColor=xmarkColor, plotColor=plotColorList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        if xrange is None:
+            xrange = plt.xlim()
+        plt.ylabel(sinHarmonicLabel, fontsize=labelSize)
+        plt.plot([xrange[0], xrange[1]], [0,0], 'k')
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (arange is not None):
+            plt.ylim(arange[0], arange[1])
+        if maintitle is not None:
+            plt.title(maintitle)
+        if symlogy is True:
+            plt.yscale('symlog', linthreshy=0.01)
+        
+        plt.subplot(212)
+        if not plotList:
+            PlotValsErrors(efit, cosHarmonicName, xlog=xlog, xmark=xmark, 
+                            xmarkColor=xmarkColor, smaScale=smaScale, plotErrors=plotErrors)
+        else:
+            for i in range(nEfits):
+                PlotValsErrors(efit[i], cosHarmonicName, xlog=xlog, xmark=xmark,
+                                xmarkColor=xmarkColor, plotColor=plotColorList[i], 
+                                smaScale=smaScale, plotErrors=plotErrors)
+        plt.plot([xrange[0], xrange[1]], [0,0], 'k')
+        if (xrange is not None):
+            plt.xlim(xrange[0], xrange[1])
+        if (brange is not None):
+            plt.ylim(brange[0], brange[1])
+        plt.ylabel(cosHarmonicLabel, fontsize=labelSize)
+        plt.xlabel(xLabelString, fontsize=labelSize)
+        if symlogy is True:
+            plt.yscale('symlog', linthreshy=0.01)
 
 
 
 def PlotHigherMoment( efit, m=4, xlog=False, xrange=None, yrange=None,
-				xmark=None, maintitle=None, xtitle=None, plotColorList=['k', 'r', 'g', 'b'],
-				noErase=False, labelSize=12, smaScale=1.0  ):
-	"""Plot 2nd moment of higher-order harmonics (e.g., A_4^2 + B_4^2) for one or more 
-	ellipse-fit objects. Meant for use with IRAF ellipse fits.  
-	efit can be a single ellipse-fit object [generated by ReadEllipse] or a list of 
-	such objects.
-		Defaults to m=4.
-		plotColorList = optional list of color specifications for use when plotting
-	a list of ellipse-fit objects.
-		labelSize = sizes of x- and y-axis labels (in points)
-		
-		smaScale = conversion from arc seconds (or pixel) to desired linear scale
-	(e.g., parsecs or kpc) for the x-axis.
-	"""
-	
-	
-	if isinstance(efit, list):
-		nEfits = len(efit)
-		plotList = True
-	else:
-		plotList = False
+                xmark=None, maintitle=None, xtitle=None, plotColorList=['k', 'r', 'g', 'b'],
+                noErase=False, labelSize=12, smaScale=1.0  ):
+    """Plot 2nd moment of higher-order harmonics (e.g., A_4^2 + B_4^2) for one or more 
+    ellipse-fit objects. Meant for use with IRAF ellipse fits.  
+    efit can be a single ellipse-fit object [generated by ReadEllipse] or a list of 
+    such objects.
+        Defaults to m=4.
+        plotColorList = optional list of color specifications for use when plotting
+    a list of ellipse-fit objects.
+        labelSize = sizes of x- and y-axis labels (in points)
+        
+        smaScale = conversion from arc seconds (or pixel) to desired linear scale
+    (e.g., parsecs or kpc) for the x-axis.
+    """
+    
+    
+    if isinstance(efit, list):
+        nEfits = len(efit)
+        plotList = True
+    else:
+        plotList = False
 
-	if (m < 3) or (m > 8):
-		if (m < 3):
-			print("*** WARNING: m < 3 harmonic components not defined! ***")
-		else:
-			print("*** WARNING: m > 8 harmonic components not currently supported! ***")
-		return None
-	sinHarmonicName = "a%1d" % m
-	sinHarmonicLabel = "A%1d" % m
-	cosHarmonicName = "b%1d" % m
+    if (m < 3) or (m > 8):
+        if (m < 3):
+            print("*** WARNING: m < 3 harmonic components not defined! ***")
+        else:
+            print("*** WARNING: m > 8 harmonic components not currently supported! ***")
+        return None
+    sinHarmonicName = "a{0:1d}".format(m)
+    sinHarmonicLabel = "A{0:1d}".format(m)
+    cosHarmonicName = "b{0:1d}".format(m)
 
-	if noErase is False:
-		plt.clf()
-	if not plotList:
-		PlotHarmonicMomentErrors(efit, m, xlog=xlog, xmark=xmark, smaScale=smaScale)
-	else:
-		for i in range(nEfits):
-			PlotHarmonicMomentErrors(efit[i], m, xlog=xlog, xmark=xmark,
-							plotColor=plotColorList[i], smaScale=smaScale)
-	if xrange is None:
-		xrange = plt.xlim()
-	if (xrange is not None):
-		plt.xlim(xrange[0], xrange[1])
-	if (yrange is not None):
-		plt.ylim(yrange[0], yrange[1])
-	if maintitle is not None:
-		plt.title(maintitle)
+    if noErase is False:
+        plt.clf()
+    if not plotList:
+        PlotHarmonicMomentErrors(efit, m, xlog=xlog, xmark=xmark, smaScale=smaScale)
+    else:
+        for i in range(nEfits):
+            PlotHarmonicMomentErrors(efit[i], m, xlog=xlog, xmark=xmark,
+                            plotColor=plotColorList[i], smaScale=smaScale)
+    if xrange is None:
+        xrange = plt.xlim()
+    if (xrange is not None):
+        plt.xlim(xrange[0], xrange[1])
+    if (yrange is not None):
+        plt.ylim(yrange[0], yrange[1])
+    if maintitle is not None:
+        plt.title(maintitle)
 
 
 
 def DrawOneEllipse( x, y, a, pa, ell, color='r', lw=2, alpha=0.5 ):
-	"""
-	Draw an ellipse on a pre-existing plot.
-	
-	Draws an ellipse on a figure, centered at (x,y) [data coordinates] with
-	semi-major axis a, position angle pa [in usual astronomial sense of CCW 
-	from +y axis], and ellipticity ell.
+    """
+    Draw an ellipse on a pre-existing plot.
+    
+    Draws an ellipse on a figure, centered at (x,y) [data coordinates] with
+    semi-major axis a, position angle pa [in usual astronomial sense of CCW 
+    from +y axis], and ellipticity ell.
 
-		color, lw, alpha: standard matplotlib parameters for the ellipses
-	"""
-	w = 2*a
-	h = (1 - ell)*w
-	pa_adj = 90.0 + pa
-	ellipseObj = Ellipse(xy=(x,y), width=w, height=h, angle=pa_adj,
-					edgecolor=color, fc='None', lw=lw, alpha=alpha)
-	ax = plt.gca()
-	ax.add_patch(ellipseObj)
-	
-	
-	
+        color, lw, alpha: standard matplotlib parameters for the ellipses
+    """
+    w = 2*a
+    h = (1 - ell)*w
+    pa_adj = 90.0 + pa
+    ellipseObj = Ellipse(xy=(x,y), width=w, height=h, angle=pa_adj,
+                    edgecolor=color, fc='None', lw=lw, alpha=alpha)
+    ax = plt.gca()
+    ax.add_patch(ellipseObj)
+    
+    
+    
 def DrawEllipses( ellipseFit, start=None, step=None, end=None, xc=0, yc=0, 
-					rawPix=False, color='r', lw=1, alpha=0.5 ):
-	"""Draw multiple ellipses from an ellipse-fit object on a pre-existing plot.
-	
-	Given an ellipse-fit object, this function draws ellipses on the current
-	plot corresponding to the ellipses specified in the ellipse-fit object
-			ellipseFit: ellipse-fit object (e.g., generated by ReadEllipse)
-			start: initial index to plot [default = 0]
-			step: delta-index for plotted ellipses [default = 1]
-			end: final sma index to plot [default = n_elements in ellipseFit]
-		
-			xc,yc: reference center coordinates (will be subtracted from ellipse center
-		coordinates before plotting)
-		
-			rawPix: True to use raw pixel values instead of sma values from ellipse fit
-		color, lw, alpha: standard matplotlib parameters for the ellipses
-	"""
-	
-	x0 = ellipseFit.x0
-	y0 = ellipseFit.y0
-	if rawPix is True:
-		a = ellipseFit.sma_pix
-	else:
-		a = ellipseFit.sma
-	ell = ellipseFit.ellip
-	pa = ellipseFit.pa
-	nEllipses = len(x0)
-	
-	if start is None:
-		i0 = 0
-	else:
-		i0 = start
-	if end is None:
-		i1 = nEllipses
-	else:
-		i1 = end
-	if step is None:
-		delta_i = 1
-	else:
-		delta_i = step
-	
-	for i in range(i0, i1, delta_i):
-		DrawOneEllipse(x0[i] - xc, y0[i] - yc, a[i], pa[i], ell[i], color=color, lw=lw,
-						alpha=alpha)
+                    rawPix=False, color='r', lw=1, alpha=0.5 ):
+    """Draw multiple ellipses from an ellipse-fit object on a pre-existing plot.
+    
+    Given an ellipse-fit object, this function draws ellipses on the current
+    plot corresponding to the ellipses specified in the ellipse-fit object
+            ellipseFit: ellipse-fit object (e.g., generated by ReadEllipse)
+            start: initial index to plot [default = 0]
+            step: delta-index for plotted ellipses [default = 1]
+            end: final sma index to plot [default = n_elements in ellipseFit]
+        
+            xc,yc: reference center coordinates (will be subtracted from ellipse center
+        coordinates before plotting)
+        
+            rawPix: True to use raw pixel values instead of sma values from ellipse fit
+        color, lw, alpha: standard matplotlib parameters for the ellipses
+    """
+    
+    x0 = ellipseFit.x0
+    y0 = ellipseFit.y0
+    if rawPix is True:
+        a = ellipseFit.sma_pix
+    else:
+        a = ellipseFit.sma
+    ell = ellipseFit.ellip
+    pa = ellipseFit.pa
+    nEllipses = len(x0)
+    
+    if start is None:
+        i0 = 0
+    else:
+        i0 = start
+    if end is None:
+        i1 = nEllipses
+    else:
+        i1 = end
+    if step is None:
+        delta_i = 1
+    else:
+        delta_i = step
+    
+    for i in range(i0, i1, delta_i):
+        DrawOneEllipse(x0[i] - xc, y0[i] - yc, a[i], pa[i], ell[i], color=color, lw=lw,
+                        alpha=alpha)
 
 
 
 def minpoint( vector, value ):
-	"""For a monotonically increasing vector, returns the smallest index
-	for which vector[index] > value."""
-	
-	inds = [i for i in range(len(vector)) if vector[i] > value]
-	return inds[0]
+    """For a monotonically increasing vector, returns the smallest index
+    for which vector[index] > value."""
+    
+    inds = [i for i in range(len(vector)) if vector[i] > value]
+    return inds[0]
 
 
 def PlotSBProfile( ellipseFit, xrange=None, xmark=None, expfit=None, zp=None, title=None, 
-			filterName="R", xtitle=None, sigma=None, sigmaColor="r", noErase=False, 
-			showGrid=False, kpcGrid=None, D=None, z=None, xfitmarks=None, plotErrors=False, 
-			sigmaEnv=False, labelSize=14, color='k', lw=1 ):
-	"""Plot an ellipse-fit profile (intensity vs radius), with log-scaling on
-	y axis.  Optionally, a set of radii to mark with vertical dotted lines can
-	be supplied (xmark), one or more exponential fit can be plotted as well
-	(the exponential fit should be supplied as a list: [I_0, h] or 
-	[I_1, h_1, I_2, h_2, ...].  
-	
-	If a zero point is suppled (zp), then the intensities are converted to magnitudes.
-	
-	If showGrid is True, standard vertical matplotlib grid marks are drawn, using the bottom
-	x-axis. Note that these will appear identical to any lines specified by xmark.
-	
-	Semi-major axis values are assumed to be in arc sec, but an alternate
-	x-axis label can be supplied via the xtitle keyword.
-	
-	If a distance in Mpc is supplied (D), then a scale in kpc is drawn
-	across the top axis, assuming that the semi-major axis values are in
-	arc sec.
-	Alternately, a redshift can be supplied using the z keyword.
-	
-	If kpcGrid is a number, then vertical grid lines are drawn, spaced every kpcGrid
-	steps using the top (kpc-based) x-axis (this only happens if a value for D is
-	also supplied).
-	
-	If sigmaEnv is True, then upper and lower envelop profiles (profile +/- sigma)
-	are drawn, instead of the 4.94*sigma constant level.
-	"""
-	
-	yt = "Intensity [ADU/pixel]"
+            filterName="R", xtitle=None, sigma=None, sigmaColor="r", noErase=False, 
+            showGrid=False, kpcGrid=None, D=None, z=None, xfitmarks=None, plotErrors=False, 
+            sigmaEnv=False, labelSize=14, color='k', lw=1 ):
+    """Plot an ellipse-fit profile (intensity vs radius), with log-scaling on
+    y axis.  Optionally, a set of radii to mark with vertical dotted lines can
+    be supplied (xmark), one or more exponential fit can be plotted as well
+    (the exponential fit should be supplied as a list: [I_0, h] or 
+    [I_1, h_1, I_2, h_2, ...].  
+    
+    If a zero point is suppled (zp), then the intensities are converted to magnitudes.
+    
+    If showGrid is True, standard vertical matplotlib grid marks are drawn, using the bottom
+    x-axis. Note that these will appear identical to any lines specified by xmark.
+    
+    Semi-major axis values are assumed to be in arc sec, but an alternate
+    x-axis label can be supplied via the xtitle keyword.
+    
+    If a distance in Mpc is supplied (D), then a scale in kpc is drawn
+    across the top axis, assuming that the semi-major axis values are in
+    arc sec.
+    Alternately, a redshift can be supplied using the z keyword.
+    
+    If kpcGrid is a number, then vertical grid lines are drawn, spaced every kpcGrid
+    steps using the top (kpc-based) x-axis (this only happens if a value for D is
+    also supplied).
+    
+    If sigmaEnv is True, then upper and lower envelop profiles (profile +/- sigma)
+    are drawn, instead of the 4.94*sigma constant level.
+    """
+    
+    yt = "Intensity [ADU/pixel]"
 
-	if xtitle is None:
-		xt = "Radius [" + ellipseFit.sma_units + "]"
-	else:
-		xt = xtitle
-	
-	if noErase is False:
-		plt.clf()
-	rr = np.array(ellipseFit["sma"])
-	ii = np.array(ellipseFit["intens"])
-	
-	min_i = min(ii)
-	max_i = max(ii)
-	if min(ii) < 0:
-		min_i = min([x for x in ii if x > 0])
+    if xtitle is None:
+        xt = "Radius [" + ellipseFit.sma_units + "]"
+    else:
+        xt = xtitle
+    
+    if noErase is False:
+        plt.clf()
+    rr = np.array(ellipseFit["sma"])
+    ii = np.array(ellipseFit["intens"])
+    
+    min_i = min(ii)
+    max_i = max(ii)
+    if min(ii) < 0:
+        min_i = min([x for x in ii if x > 0])
 
-	if zp is not None:
-		mags = zp - 2.5*np.log10(ii)
-		min_y = math.ceil(zp - 2.5*math.log10(min_i))
-		max_y = math.floor(zp - 2.5*math.log10(max_i))
-	else:
-		# round minimum and maximum values to nearest power of ten (round up
-		# for maximum, round down for minimum)
-		min_y = 10.0**math.floor(math.log10(min_i))
-		max_y = 10.0**math.ceil(math.log10(max_i))
-	if zp is not None:
-		plt.plot(rr, mags, color=color, lw=lw, zorder=10)
-		if plotErrors is True:
-			mags_plus = zp - 2.5*np.log10(ii + ellipseFit.int_err) - mags
-			mags_min = mags - (zp - 2.5*np.log10(ii - ellipseFit.int_err))
-			mags_errs = np.array([mags_min, mags_plus])
-			plt.errorbar(rr, mags, mags_errs, fmt=None, ecolor=color,zorder=11)
-	else:
-		plt.semilogy(rr, ii, color=color, lw=lw, zorder=10)
-		if plotErrors is True:
-			plt.errorbar(rr, ii, ellipseFit.int_err, fmt=None, ecolor=color,zorder=11)
-	if xrange is not None:
-		plt.xlim(xrange[0],xrange[1])
-	if expfit is not None:
-		nfits = int(len(expfit)/2)
-		for j in range(nfits):
-			I0 = expfit[j*2]
-			h = expfit[j*2 + 1]
-			fitflux = I0*np.exp(-rr/h)
-			if zp is not None:
-				plt.plot(rr, zp - 2.5*np.log10(fitflux), "g--")
-			else:
-				plt.semilogy(rr, fitflux, "g--")
-		
-	if xmark is not None:
-		for xm in xmark:
-			plt.axvline(xm, ls=":", color="k")
-	
-	if (sigma is not None):
-		if (sigmaEnv is False):
-			if zp is not None:
-				limitLevel = zp - 2.5*math.log10(4.94*sigma)
-			else:
-				limitLevel = 4.94*sigma
-			plt.axhline(y=limitLevel, color=sigmaColor, linestyle="--", linewidth=2)
-		else:
-			# plot +/- sky_sigma envelopes
-			lowerProf = ii - sigma
-			upperProf = ii + sigma
-			if zp is not None:
-				lowerMags = zp - 2.5*np.log10(lowerProf)
-				upperMags = zp - 2.5*np.log10(upperProf)
-				plt.plot(rr, upperMags, '-', color='0.7',zorder=1)
-				plt.plot(rr, lowerMags, '-', color='0.7',zorder=1)
-			else:
-				plt.plot(rr, upperProf, '-', color='0.7',zorder=1)
-				plt.plot(rr, lowerProf, '-', color='0.7',zorder=1)
-	
-	if xfitmarks is not None:
-		indices = [ minpoint(rr, xf) for xf in xfitmarks ]
-		xfm = rr[indices]
-		if zp is not None:
-			yfm = mags[indices]
-		else:
-			yfm = ii[indices]
-		plt.plot(xfm, yfm, 's', mec='k', mfc='None', ms=8)
-		
-	if zp is not None:
-		# need have y-axis in proper orientation for magnitudes
-		yt = r"$\mu_{" + filterName + r"} \hspace{0.5} [\rm{mag} \hspace{0.5} \rm{arcsec}^{-2}]$"
-	
-	plt.ylim(min_y, max_y)
-	plt.xlabel(xt, fontsize=labelSize) ; plt.ylabel(yt, fontsize=labelSize)
-	if title is not None:
-		plt.title(title)
+    if zp is not None:
+        mags = zp - 2.5*np.log10(ii)
+        min_y = math.ceil(zp - 2.5*math.log10(min_i))
+        max_y = math.floor(zp - 2.5*math.log10(max_i))
+    else:
+        # round minimum and maximum values to nearest power of ten (round up
+        # for maximum, round down for minimum)
+        min_y = 10.0**math.floor(math.log10(min_i))
+        max_y = 10.0**math.ceil(math.log10(max_i))
+    if zp is not None:
+        plt.plot(rr, mags, color=color, lw=lw, zorder=10)
+        if plotErrors is True:
+            mags_plus = zp - 2.5*np.log10(ii + ellipseFit.int_err) - mags
+            mags_min = mags - (zp - 2.5*np.log10(ii - ellipseFit.int_err))
+            mags_errs = np.array([mags_min, mags_plus])
+            plt.errorbar(rr, mags, mags_errs, fmt=None, ecolor=color,zorder=11)
+    else:
+        plt.semilogy(rr, ii, color=color, lw=lw, zorder=10)
+        if plotErrors is True:
+            plt.errorbar(rr, ii, ellipseFit.int_err, fmt=None, ecolor=color,zorder=11)
+    if xrange is not None:
+        plt.xlim(xrange[0],xrange[1])
+    if expfit is not None:
+        nfits = int(len(expfit)/2)
+        for j in range(nfits):
+            I0 = expfit[j*2]
+            h = expfit[j*2 + 1]
+            fitflux = I0*np.exp(-rr/h)
+            if zp is not None:
+                plt.plot(rr, zp - 2.5*np.log10(fitflux), "g--")
+            else:
+                plt.semilogy(rr, fitflux, "g--")
+        
+    if xmark is not None:
+        for xm in xmark:
+            plt.axvline(xm, ls=":", color="k")
+    
+    if (sigma is not None):
+        if (sigmaEnv is False):
+            if zp is not None:
+                limitLevel = zp - 2.5*math.log10(4.94*sigma)
+            else:
+                limitLevel = 4.94*sigma
+            plt.axhline(y=limitLevel, color=sigmaColor, linestyle="--", linewidth=2)
+        else:
+            # plot +/- sky_sigma envelopes
+            lowerProf = ii - sigma
+            upperProf = ii + sigma
+            if zp is not None:
+                lowerMags = zp - 2.5*np.log10(lowerProf)
+                upperMags = zp - 2.5*np.log10(upperProf)
+                plt.plot(rr, upperMags, '-', color='0.7',zorder=1)
+                plt.plot(rr, lowerMags, '-', color='0.7',zorder=1)
+            else:
+                plt.plot(rr, upperProf, '-', color='0.7',zorder=1)
+                plt.plot(rr, lowerProf, '-', color='0.7',zorder=1)
+    
+    if xfitmarks is not None:
+        indices = [ minpoint(rr, xf) for xf in xfitmarks ]
+        xfm = rr[indices]
+        if zp is not None:
+            yfm = mags[indices]
+        else:
+            yfm = ii[indices]
+        plt.plot(xfm, yfm, 's', mec='k', mfc='None', ms=8)
+        
+    if zp is not None:
+        # need have y-axis in proper orientation for magnitudes
+        yt = r"$\mu_{" + filterName + r"} \hspace{0.5} [\rm{mag} \hspace{0.5} \rm{arcsec}^{-2}]$"
+    
+    plt.ylim(min_y, max_y)
+    plt.xlabel(xt, fontsize=labelSize) ; plt.ylabel(yt, fontsize=labelSize)
+    if title is not None:
+        plt.title(title)
 
-	minorLocator = mpl.ticker.MultipleLocator(5)
-	plt.axes().xaxis.set_minor_locator(minorLocator)
-	plt.minorticks_on()
-	if showGrid is True:
-		plt.grid(which='both', axis='x')
-	
-	if (D is not None) or (z is not None):
-		if z is not None:
-			# get angular-size-to-proper-distance conversion
-			arcsec_to_kpc = cosmology.funcs.kpc_proper_per_arcmin(z).value / 60.
-		else:
-			# assume linear distance in Euclidean universe
-			arcsec_to_kpc = pcperarcsec(D) / 1000.
-		# create top x-axis with radii marked in kpc
-		xrange_arcsec = np.array(plt.xlim())
-		xrange_kpc = xrange_arcsec * arcsec_to_kpc
-		topx = plt.twiny()
-		topx.tick_params(length=10)
-		topx.tick_params(length=5, which="minor")
-		topx.set_xlim(xrange_kpc[0], xrange_kpc[1])
-		if kpcGrid is not None:
-			minorLocator = mpl.ticker.MultipleLocator(kpcGrid)
-			topx.xaxis.set_minor_locator(minorLocator)
-			topx.grid(which='both', axis='x')
-		plt.xlabel("Radius [kpc]", fontsize=labelSize)
-		plt.show()
+    minorLocator = mpl.ticker.MultipleLocator(5)
+    plt.axes().xaxis.set_minor_locator(minorLocator)
+    plt.minorticks_on()
+    if showGrid is True:
+        plt.grid(which='both', axis='x')
+    
+    if (D is not None) or (z is not None):
+        if z is not None:
+            # get angular-size-to-proper-distance conversion
+            arcsec_to_kpc = cosmology.funcs.kpc_proper_per_arcmin(z).value / 60.
+        else:
+            # assume linear distance in Euclidean universe
+            arcsec_to_kpc = pcperarcsec(D) / 1000.
+        # create top x-axis with radii marked in kpc
+        xrange_arcsec = np.array(plt.xlim())
+        xrange_kpc = xrange_arcsec * arcsec_to_kpc
+        topx = plt.twiny()
+        topx.tick_params(length=10)
+        topx.tick_params(length=5, which="minor")
+        topx.set_xlim(xrange_kpc[0], xrange_kpc[1])
+        if kpcGrid is not None:
+            minorLocator = mpl.ticker.MultipleLocator(kpcGrid)
+            topx.xaxis.set_minor_locator(minorLocator)
+            topx.grid(which='both', axis='x')
+        plt.xlabel("Radius [kpc]", fontsize=labelSize)
+        plt.show()
 
 
 # Backwards compatibility (for older code that assumes PlotSBProfile is called doplot):
@@ -2035,296 +2042,295 @@ doplot = PlotSBProfile
 # Code for working with (abridged) versions of Bender ellipse-fit output
 
 def ConvertHigherOrder_Iraf2Bender( a, ell, B_iraf, magorrianStyle=True ):
-	"""Convert IRAF ellipse-fit cos(m theta) term Bm to Bender ellipse-fit
-	cos(m theta) term am [really am/a].  By default, the output is in
-	Magorrian-style 100 * (am/a) format.
-	
-	a = semi-major axis
-	ell = ellipticity
-	"""
-	b = (1.0 - ell)*a
-	am_base = np.sqrt(b/a) * B_iraf
-	if magorrianStyle is True:
-		return 100.0 * am_base
-	else:
-		return am_base
+    """Convert IRAF ellipse-fit cos(m theta) term Bm to Bender ellipse-fit
+    cos(m theta) term am [really am/a].  By default, the output is in
+    Magorrian-style 100 * (am/a) format.
+    
+    a = semi-major axis
+    ell = ellipticity
+    """
+    b = (1.0 - ell)*a
+    am_base = np.sqrt(b/a) * B_iraf
+    if magorrianStyle is True:
+        return 100.0 * am_base
+    else:
+        return am_base
 
 def ConvertHigherOrder_Bender2Iraf( a, ell, am, magorrianStyle=True ):
-	"""Convert Bender/Saglia ellipse-fit cos(m theta) term am  [really am/a]
-	to IRAF ellipse-fit cos(m theta) term Bm.  By default, the input is assumed
-	to be in Magorrian-style 100 * (a4/a) format.
-	
-	a = semi-major axis
-	ell = ellipticity
-	"""
-	if magorrianStyle is True:
-		am_base = am/100.0
-	else:
-		am_base = am
-	b = (1.0 - ell)*a
-	Bm = am_base / np.sqrt(b/a)
-	return Bm
+    """Convert Bender/Saglia ellipse-fit cos(m theta) term am  [really am/a]
+    to IRAF ellipse-fit cos(m theta) term Bm.  By default, the input is assumed
+    to be in Magorrian-style 100 * (a4/a) format.
+    
+    a = semi-major axis
+    ell = ellipticity
+    """
+    if magorrianStyle is True:
+        am_base = am/100.0
+    else:
+        am_base = am
+    b = (1.0 - ell)*a
+    Bm = am_base / np.sqrt(b/a)
+    return Bm
 
 
 
 def ReadBenderEllipse( filename, dataFrame=False, headerLine=None, useDefaultColumnNames=True ):
-	"""Read in an ellipse fit generated by Bender/Saglia code and store it
-	in a dictionary (or, optionally, a ListDataFrame object). Columns are
-	converted to 1-D numpy arrays.
-	
-	headerLine indicates which line contains the column titles (first line = 1,
-	etc.); the actual data is assumed to start immediately after.
-	Normally, the function attempts to locate the header line automatically
-	(first line in file with same number of elements [excluding any initial "#"]
-	as last line in file).  The headerLine keyword is mainly useful for perverse
-	situations (e.g., there is a line in the header that happens to have 12
-	words in it).
-		
-	Because we (currently) don't know how the Bender code handles position
-	angles, we don't attempt to "correct" the PA.
-	"""
-	
-	lines = open(filename).readlines()
-	nTotalLines = len(lines)
-	lastLine = lines[-1]
-	nCols = len(lastLine.split())
-	
-	# find the header line -- should be first line which has same number of elements
-	# as the last line in the file
-	if headerLine is None:
-		headerString = None
-		for i in range(nTotalLines):
-			tmpLine = lines[i].lstrip("#")
-			if len(tmpLine.split()) == nCols:
-				headerString = tmpLine
-				headerLineIndex = i
-				break
-		if headerString is None:
-			print("Unable to find header line!\n")
-			return None
-	else:
-		headerLineIndex = headerLine - 1
-		headerString = lines[headerLineIndex]
+    """Read in an ellipse fit generated by Bender/Saglia code and store it
+    in a dictionary (or, optionally, a ListDataFrame object). Columns are
+    converted to 1-D numpy arrays.
+    
+    headerLine indicates which line contains the column titles (first line = 1,
+    etc.); the actual data is assumed to start immediately after.
+    Normally, the function attempts to locate the header line automatically
+    (first line in file with same number of elements [excluding any initial "#"]
+    as last line in file).  The headerLine keyword is mainly useful for perverse
+    situations (e.g., there is a line in the header that happens to have 12
+    words in it).
+        
+    Because we (currently) don't know how the Bender code handles position
+    angles, we don't attempt to "correct" the PA.
+    """
+    
+    lines = open(filename).readlines()
+    nTotalLines = len(lines)
+    lastLine = lines[-1]
+    nCols = len(lastLine.split())
+    
+    # find the header line -- should be first line which has same number of elements
+    # as the last line in the file
+    if headerLine is None:
+        headerString = None
+        for i in range(nTotalLines):
+            tmpLine = lines[i].lstrip("#")
+            if len(tmpLine.split()) == nCols:
+                headerString = tmpLine
+                headerLineIndex = i
+                break
+        if headerString is None:
+            print("Unable to find header line!\n")
+            return None
+    else:
+        headerLineIndex = headerLine - 1
+        headerString = lines[headerLineIndex]
 
-	if useDefaultColumnNames:
-		colheaders = DEFAULT_BENDER_COLUMNS
-	else:
-		colheaders = headerString.split()
-		# get rid of excess space at end, if any
-		colheaders[-1] = colheaders[-1].strip()
-	
-	# find first data line:
-	firstDataLine = None
-	for j in range(headerLineIndex + 1, nTotalLines):
-		tmpLine = lines[j]
-		if len(tmpLine.split()) == nCols:
-			firstDataLine = j
-			break
-	if firstDataLine is None:
-		print("Unable to find first data line!\n")
-		return None
-		
-	dataLines = [line for line in lines[firstDataLine:] if line[0] != "#"]
-	nDataLines = len(dataLines)
-	dataDict = {}
-	for i in range(nCols):
-		cname = colheaders[i]
-		dataDict[cname] = np.array([ float(line.split()[i]) for line in dataLines ])
-	dataDict["req"] = EquivRadius(dataDict)
-	colheaders.append("req")
-	
-	# Convert to dataFrame, if requested:
-	if dataFrame is True:
-		frameList = []
-		for cname in colheaders:
-			frameList.append(dataDict[cname])
-		result = du.ListDataFrame(frameList, colheaders)
-		# extra conveninces
-		#result.AddColumnName("sma", "a")
-		#result.AddColumnName("intens", "i")
-		# add meta-data
-		result.tableFile = filename
-	else:
-		result = dataDict
+    if useDefaultColumnNames:
+        colheaders = DEFAULT_BENDER_COLUMNS
+    else:
+        colheaders = headerString.split()
+        # get rid of excess space at end, if any
+        colheaders[-1] = colheaders[-1].strip()
+    
+    # find first data line:
+    firstDataLine = None
+    for j in range(headerLineIndex + 1, nTotalLines):
+        tmpLine = lines[j]
+        if len(tmpLine.split()) == nCols:
+            firstDataLine = j
+            break
+    if firstDataLine is None:
+        print("Unable to find first data line!\n")
+        return None
+        
+    dataLines = [line for line in lines[firstDataLine:] if line[0] != "#"]
+    nDataLines = len(dataLines)
+    dataDict = {}
+    for i in range(nCols):
+        cname = colheaders[i]
+        dataDict[cname] = np.array([ float(line.split()[i]) for line in dataLines ])
+    dataDict["req"] = EquivRadius(dataDict)
+    colheaders.append("req")
+    
+    # Convert to dataFrame, if requested:
+    if dataFrame is True:
+        frameList = []
+        for cname in colheaders:
+            frameList.append(dataDict[cname])
+        result = du.ListDataFrame(frameList, colheaders)
+        # extra conveninces
+        #result.AddColumnName("sma", "a")
+        #result.AddColumnName("intens", "i")
+        # add meta-data
+        result.tableFile = filename
+    else:
+        result = dataDict
 
-	return result
+    return result
 
 
 
 def WriteBenderEllipse( ellipseFit, outputFilename ):
-	"""Given an ellipseFit dictionary containing Bender-format entries (as generated by
-	ReadBenderEllipse), write the ellipse fit to a text file.
-	
-	ASSUMES THAT ellipseFit IS ALREADY IN BENDER FORMAT!
-	"""
-	
-	outputLines = [COLUMNS_BENDER, "#\n"]
-	
-	smaKey = 'a'
-	if 'a' not in ellipseFit.keys():
-		smaKey = 'r'
-	nDataLines = len(ellipseFit[smaKey])
-	for i in range(nDataLines):
-		a = ellipseFit[smaKey][i]
-		b = ellipseFit['b'][i]
-		sb = ellipseFit['sb'][i]
-		eps = ellipseFit['eps'][i]
-		deps = ellipseFit['deps'][i]
-		pa = ellipseFit['pa'][i]
-		dpa = ellipseFit['dpa'][i]
-		a2 = ellipseFit['a2'][i]
-		a4 = ellipseFit['a4'][i]
-		a6 = ellipseFit['a6'][i]
-		a8 = ellipseFit['a8'][i]
-		a10 = ellipseFit['a10'][i]
-		a12 = ellipseFit['a12'][i]
-		t = ellipseFit['t'][i]
-		outLine = OUTPUT_FMT_BENDER_ALL % (a,b,sb,eps,deps,pa,dpa,a2,a4,a6,a8,a10,a12,t)
-		outputLines.append(outLine)
-	
-	outf = open(outputFilename, 'w')
-	for line in outputLines: outf.write(line)
-	outf.close()
+    """Given an ellipseFit dictionary containing Bender-format entries (as generated by
+    ReadBenderEllipse), write the ellipse fit to a text file.
+    
+    ASSUMES THAT ellipseFit IS ALREADY IN BENDER FORMAT!
+    """
+    
+    outputLines = [COLUMNS_BENDER, "#\n"]
+    
+    smaKey = 'a'
+    if 'a' not in ellipseFit.keys():
+        smaKey = 'r'
+    nDataLines = len(ellipseFit[smaKey])
+    for i in range(nDataLines):
+        a = ellipseFit[smaKey][i]
+        b = ellipseFit['b'][i]
+        sb = ellipseFit['sb'][i]
+        eps = ellipseFit['eps'][i]
+        deps = ellipseFit['deps'][i]
+        pa = ellipseFit['pa'][i]
+        dpa = ellipseFit['dpa'][i]
+        a2 = ellipseFit['a2'][i]
+        a4 = ellipseFit['a4'][i]
+        a6 = ellipseFit['a6'][i]
+        a8 = ellipseFit['a8'][i]
+        a10 = ellipseFit['a10'][i]
+        a12 = ellipseFit['a12'][i]
+        t = ellipseFit['t'][i]
+        outLine = OUTPUT_FMT_BENDER_ALL % (a,b,sb,eps,deps,pa,dpa,a2,a4,a6,a8,a10,a12,t)
+        outputLines.append(outLine)
+    
+    outf = open(outputFilename, 'w')
+    for line in outputLines: outf.write(line)
+    outf.close()
 
 
 def ConvertBenderToIraf( benderEfit, dataFrame=True ):
-	"""Given an ellipse-fit DataFrame object generated by reading a Bender/Saglia
-	ellipse-fit file, generate a new DataFrame object in IRAF ellipse-fit format.
-	
-		a4,a6,a8,a10,a12 are converted to IRAF-format B4,B6,etc. (errors for these
-			quantities are set to 0, since the 
-	"""
-	
-	a = benderEfit['a']
-	ell = benderEfit['eps']
-	nPts = len(a)
-	
-	irafDict = {}
-	irafDict['sma'] = benderEfit['a']
-	irafDict['sb'] = benderEfit['sb']
-	irafDict['ellip'] = benderEfit['eps']
-	irafDict['ellip_err'] = benderEfit['deps']
-	irafDict['pa'] = benderEfit['pa']
-	irafDict['pa_err'] = benderEfit['dpa']
-	irafDict['b4'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a4'])
-	irafDict['b6'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a6'])
-	irafDict['b8'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a8'])
-	irafDict['b10'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a10'])
-	irafDict['b12'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a12'])
-	
-	# add in missing columns, filled with zeros
-	for cname in IRAF_COLNAMES_B:
-		if cname not in BENDER_COLUMNS_AS_IRAF:
-			irafDict[cname] = np.zeros(nPts)
-	
-	# Convert to dataFrame, if requested:
-	if dataFrame is True:
-		frameList = []
-		columnNameList = IRAF_COLNAMES_B
-		for cname in columnNameList:
-			frameList.append(irafDict[cname])
-		result = du.ListDataFrame(frameList, columnNameList)
-		# extra conveninces
-		result.AddColumnName("sma", "a")
-		result.AddColumnName("intens", "i")
-	else:
-		result = irafDict
-	
-	return result
-	
+    """Given an ellipse-fit DataFrame object generated by reading a Bender/Saglia
+    ellipse-fit file, generate a new DataFrame object in IRAF ellipse-fit format.
+    
+        a4,a6,a8,a10,a12 are converted to IRAF-format B4,B6,etc. (errors for these
+            quantities are set to 0, since the 
+    """
+    
+    a = benderEfit['a']
+    ell = benderEfit['eps']
+    nPts = len(a)
+    
+    irafDict = {}
+    irafDict['sma'] = benderEfit['a']
+    irafDict['sb'] = benderEfit['sb']
+    irafDict['ellip'] = benderEfit['eps']
+    irafDict['ellip_err'] = benderEfit['deps']
+    irafDict['pa'] = benderEfit['pa']
+    irafDict['pa_err'] = benderEfit['dpa']
+    irafDict['b4'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a4'])
+    irafDict['b6'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a6'])
+    irafDict['b8'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a8'])
+    irafDict['b10'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a10'])
+    irafDict['b12'] = ConvertHigherOrder_Bender2Iraf(a, ell, benderEfit['a12'])
+    
+    # add in missing columns, filled with zeros
+    for cname in IRAF_COLNAMES_B:
+        if cname not in BENDER_COLUMNS_AS_IRAF:
+            irafDict[cname] = np.zeros(nPts)
+    
+    # Convert to dataFrame, if requested:
+    if dataFrame is True:
+        frameList = []
+        columnNameList = IRAF_COLNAMES_B
+        for cname in columnNameList:
+            frameList.append(irafDict[cname])
+        result = du.ListDataFrame(frameList, columnNameList)
+        # extra conveninces
+        result.AddColumnName("sma", "a")
+        result.AddColumnName("intens", "i")
+    else:
+        result = irafDict
+    
+    return result
+    
 
 def ConvertIrafToBender( irafEfit, irafColnames=None, dataFrame=True ):
-	"""Given an ellipse-fit DataFrame object generated by reading an IRAF
-	ellipse-fit file, generate a new DataFrame object in (abridged) Bender
-	ellipse-fit format.
-	
-	You can *also* use a simple Python dictionary for irafEfit, but in this
-	case you *must* supply a (possibly empty) list via the keyword irafColnames.
-	This list needs to contain the keys of any even high-order [cos(m theta), with
-	m >= 6] terms that are in the input dictionary and should be translated to Bender
-	ellipse-fit form; if the only higher-order term is m=4 ('b4'), then irafColnames
-	can be an empty list [].  For example, if B6 and B8 terms are present (indexed
-	via ['b6'] and ['b8'], then use irafColnames=['b6', 'b8'].
-	
-	If supplying a Python dictionary instead of an ellipse-fit DataFrame, the
-	dictionary *must*, at a minimum, have numpy arrays indexed with the following keys:
-	'a', 'sb', 'ellip', 'ellip_err', 'pa', 'pa_err', and 'b4'
-	(corresponding to semi-major axis, surface-brightness, ellipticity & error,
-	position angle & error, and cos(4 theta) term).
-	
-	
-		B4,B6,etc. are converted to Bender-style a4,a6,etc.
-	"""
-	
-	a = irafEfit['a']
-	ell = irafEfit['ellip']
-	if irafColnames is None:
-		irafColnames = irafEfit.colNames
-	nPts = len(a)
-	
-	benderDict = {}
-	benderDict['a'] = irafEfit['a']
-	benderDict['b'] = a * (1.0 - ell)
-	benderDict['sb'] = irafEfit['sb']
-	benderDict['eps'] = irafEfit['ellip']
-	benderDict['deps'] = irafEfit['ellip_err']
-	benderDict['pa'] = irafEfit['pa']
-	benderDict['dpa'] = irafEfit['pa_err']
-	benderDict['a2'] = np.zeros(nPts)
-	benderDict['a4'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b4'])
-	if 'b6' in irafColnames:
-		benderDict['a6'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b6'])
-	else:
-		benderDict['a6'] = np.zeros(nPts)
-	if 'b8' in irafColnames:
-		benderDict['a8'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b8'])
-	else:
-		benderDict['a8'] = np.zeros(nPts)
-	if 'b10' in irafColnames:
-		benderDict['a10'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b10'])
-	else:
-		benderDict['a10'] = np.zeros(nPts)
-	if 'b12' in irafColnames:
-		benderDict['a12'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b12'])
-	else:
-		benderDict['a12'] = np.zeros(nPts)
-	benderDict['t'] = np.zeros(nPts)
-	
-	# Convert to dataFrame, if requested:
-	if dataFrame is True:
-		frameList = []
-		columnNameList = DEFAULT_BENDER_COLUMNS
-		for cname in columnNameList:
-			frameList.append(benderDict[cname])
-		result = du.ListDataFrame(frameList, columnNameList)
-	else:
-		result = benderDict
-	
-	return result
-	
+    """Given an ellipse-fit DataFrame object generated by reading an IRAF
+    ellipse-fit file, generate a new DataFrame object in (abridged) Bender
+    ellipse-fit format.
+    
+    You can *also* use a simple Python dictionary for irafEfit, but in this
+    case you *must* supply a (possibly empty) list via the keyword irafColnames.
+    This list needs to contain the keys of any even high-order [cos(m theta), with
+    m >= 6] terms that are in the input dictionary and should be translated to Bender
+    ellipse-fit form; if the only higher-order term is m=4 ('b4'), then irafColnames
+    can be an empty list [].  For example, if B6 and B8 terms are present (indexed
+    via ['b6'] and ['b8'], then use irafColnames=['b6', 'b8'].
+    
+    If supplying a Python dictionary instead of an ellipse-fit DataFrame, the
+    dictionary *must*, at a minimum, have numpy arrays indexed with the following keys:
+    'a', 'sb', 'ellip', 'ellip_err', 'pa', 'pa_err', and 'b4'
+    (corresponding to semi-major axis, surface-brightness, ellipticity & error,
+    position angle & error, and cos(4 theta) term).
+    
+    
+        B4,B6,etc. are converted to Bender-style a4,a6,etc.
+    """
+    
+    a = irafEfit['a']
+    ell = irafEfit['ellip']
+    if irafColnames is None:
+        irafColnames = irafEfit.colNames
+    nPts = len(a)
+    
+    benderDict = {}
+    benderDict['a'] = irafEfit['a']
+    benderDict['b'] = a * (1.0 - ell)
+    benderDict['sb'] = irafEfit['sb']
+    benderDict['eps'] = irafEfit['ellip']
+    benderDict['deps'] = irafEfit['ellip_err']
+    benderDict['pa'] = irafEfit['pa']
+    benderDict['dpa'] = irafEfit['pa_err']
+    benderDict['a2'] = np.zeros(nPts)
+    benderDict['a4'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b4'])
+    if 'b6' in irafColnames:
+        benderDict['a6'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b6'])
+    else:
+        benderDict['a6'] = np.zeros(nPts)
+    if 'b8' in irafColnames:
+        benderDict['a8'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b8'])
+    else:
+        benderDict['a8'] = np.zeros(nPts)
+    if 'b10' in irafColnames:
+        benderDict['a10'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b10'])
+    else:
+        benderDict['a10'] = np.zeros(nPts)
+    if 'b12' in irafColnames:
+        benderDict['a12'] = ConvertHigherOrder_Iraf2Bender(a, ell, irafEfit['b12'])
+    else:
+        benderDict['a12'] = np.zeros(nPts)
+    benderDict['t'] = np.zeros(nPts)
+    
+    # Convert to dataFrame, if requested:
+    if dataFrame is True:
+        frameList = []
+        columnNameList = DEFAULT_BENDER_COLUMNS
+        for cname in columnNameList:
+            frameList.append(benderDict[cname])
+        result = du.ListDataFrame(frameList, columnNameList)
+    else:
+        result = benderDict
+    
+    return result
+    
 
 def ComputeSemiMinorAxis( efit, smarange=None ):
-	"""For Bender-style ellipse-fits only!
-	Re-computes semi-minor axis b, based on ellipticity and semi-major axis.
-	Optionally, the range of semi-major axes for which b is recomputed can be
-	specified via smarange (only semi-major axis values >= smarange[0] and 
-	<= smarange[1] will be affected).
-	"""
-	
-	if "intens" in efit.keys():
-		print("*** Ellipse fit appears to be IRAF-style! ***")
-		return None
-	a = efit['a']
-	ell = efit['eps']
-	nRows = len(a)
-	if smarange is not None:
-		amin = smarange[0]
-		amax = smarange[1]
-		iGood = [ i for i in range(nRows) if a[i] >= amin and a[i] <= amax ]
-	else:
-		iGood = range(nRows)
-		
-	for i in iGood:
-		efit['b'][i] = a[i] * (1.0 - ell[i])
-
+    """For Bender-style ellipse-fits only!
+    Re-computes semi-minor axis b, based on ellipticity and semi-major axis.
+    Optionally, the range of semi-major axes for which b is recomputed can be
+    specified via smarange (only semi-major axis values >= smarange[0] and 
+    <= smarange[1] will be affected).
+    """
+    
+    if "intens" in efit.keys():
+        print("*** Ellipse fit appears to be IRAF-style! ***")
+        return None
+    a = efit['a']
+    ell = efit['eps']
+    nRows = len(a)
+    if smarange is not None:
+        amin = smarange[0]
+        amax = smarange[1]
+        iGood = [ i for i in range(nRows) if a[i] >= amin and a[i] <= amax ]
+    else:
+        iGood = range(nRows)
+        
+    for i in iGood:
+        efit['b'][i] = a[i] * (1.0 - ell[i])
 
