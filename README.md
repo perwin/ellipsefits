@@ -30,8 +30,8 @@ pixels, initial ellipse position angle = 50 degrees and ellipticity =
 
     cl> doellipse n5831rss.fit el_n5831rss 1579.6 897.5 30 50 0.2 220
 
-This will generate three output files: `el\_n5831rss.tab` (STSDAS TABLES format),
-`el\_n5831rss\_tdump.txt` (text table), and `el\_n5831rss.fits` (FITS table).
+This will generate three output files: `el_n5831rss.tab` (STSDAS TABLES format),
+`el_n5831rss_tdump.txt` (text table), and `el_n5831rss.fits` (FITS table).
 
 Then, in Python:
 
