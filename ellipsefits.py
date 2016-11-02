@@ -130,11 +130,6 @@ IRAF_COLNAMES_B = ['sma', 'intens', 'int_err', 'pix_var', 'rms', 'ellip', 'ellip
 # the following columns are integer-valued
 integerColumns = ["row", "ndata", "nflag", "niter", "stop"]
 
-# pixelScales = { "WIYN": 0.2, "PC2": 0.0455, "PC1": 0.043, "WF": 0.1,
-#               "NIC3": 0.2, "NIC2": 0.075, "NIC1": 0.043, "ACSWFC": 0.05,
-#               "ACSHRC": 0.025, "DSS": 1.7, "Alfosc": 0.188,
-#               "OldAlfosc": 0.189, "SDSS": 0.396, "INTWFC": 0.331 }
-
 HIGHER_HARMONIC_RAWNAMES = ["ai5", "bi5", "ai6", "bi6", "ai7", "bi7",
                             "ai8", "bi8", "ai9", "bi9", "ai10", "bi10",
                             "ai11", "bi11", "ai12", "bi12"]
@@ -180,7 +175,7 @@ def MakeNiceLogAxes( whichAxis="xy", axisObj=None ):
 
 
 def pcperarcsec( distMpc ):
-    """Calculate parsecs/arc second, given a distance in Mpc.
+    """Calculate parsecs/arc second, given an (angular-diameter) distance in Mpc.
 
     Parameters
     ----------
@@ -191,6 +186,7 @@ def pcperarcsec( distMpc ):
     -------
     parsecs_per_arcsec : float
     """
+	return k_pcperarcsec * distMpc
 
 
 def EllipseCircum( a, b, exact=True ):
@@ -335,9 +331,11 @@ def CorrectPosAngle( posAngle, telescopePA=None, flipFlag=False, outputNP=False 
 def _ReadEllipse_fits( filename ):
     """Read an ellipse-fit table in FITS format.
     
-    Utility function to read an IRAF ellipse fit in FITS table format, as generated
-    by the tables.tcopy task. Output is a tuple of
-    (dictionary containing the columns, list of lower-cased column names).
+    Utility function to read an IRAF ellipse fit in FITS table format (assumed 
+    to have originally been generated from an ellipse-output STADAS table file 
+    by the tables.tcopy task). 
+    Output is a tuple of (dictionary containing the columns, list of lower-cased 
+    column names).
     
     Parameters
     ----------
@@ -1185,7 +1183,8 @@ def EquivRadius( dataDict ):
 
 def PlotValsErrors( efit, valName, smaName='sma', errSuffix="_err", xlog=False, 
                     ylog=False, xmark=None, xmarkColor=None, ymark=None, ymarkColor='k', 
-                    plotColor="k", lw=1, smaScale=1.0, flipPA=None, plotErrors=True ):
+                    plotColor="k", lw=1, smaScale=1.0, flipPA=None, plotErrors=True,
+                    ax=None ):
     """Plot a parameter from an ellipse-fit object vs semi-major axis, with errorbars,
     in a single plot.
     
@@ -1255,61 +1254,116 @@ def PlotValsErrors( efit, valName, smaName='sma', errSuffix="_err", xlog=False,
     
     plotErrors : bool, optional
         if True [default], then errorbars are plotted.
+        
+    ax : Axes or None, optional
+    	Axes object to plot in
 
     Returns
     -------
     None
     """
     
-    valErrName = valName + errSuffix
-    a = smaScale * np.array(efit[smaName])
-    y = np.array(efit[valName])
-    y_err = np.array(efit[valErrName])
-    if flipPA is not None:
-        if flipPA >= 0:
-            makeNeg = y >= flipPA
-            y[makeNeg] = y[makeNeg] - 180.0
-        else:
-            makePos = y <= np.abs(flipPA)
-            y[makePos] = y[makePos] + 180.0
-    if xlog is True:
-        # make x-axis tick marks larger
-        plt.tick_params(axis="x", which="major", length=10)
-        plt.tick_params(axis="x", which="minor", length=5)
-    if xlog is True and ylog is False:
-        plt.semilogx(a, y, color=plotColor, lw=lw)
-    elif xlog is False and ylog is True:
-        plt.semilogy(a, y, color=plotColor, lw=lw)
-    elif xlog is True and ylog is True:
-        plt.loglog(a, y, color=plotColor, lw=lw)
-    else:
-        plt.plot(a, y, color=plotColor, lw=lw)
-    if plotErrors is True:
-        plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
-    else:
-        plt.plot(a, y, marker='o', color=plotColor, ms=3)
-    if xmark is not None:
-        if xmarkColor is None:
-            xmarkColor = plotColor
-        if type(xmark) in [int, float]:
-            plt.axvline(xmark, ls="--", color=xmarkColor)
-        else:
-            nXmarks = len(xmark)
-            if type(xmarkColor) is not list:
-                xmarkColors = [xmarkColor]*nXmarks
-            else:
-                xmarkColors = xmarkColor
-            for i in range(len(xmark)):
-                plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
-    if ymark is not None:
-        if type(ymark) in [int, float]:
-            plt.axhline(ymark, ls="--", color=ymarkColor)
-        else:
-            for y in ymark:
-                plt.axhline(y, ls="--", color=ymarkColor)
-    
-    if xlog is True:
-        MakeNiceLogAxes(whichAxis="x")
+	if ax is None:
+		ax = plt.gca()
+	
+	valErrName = valName + errSuffix
+	a = smaScale * np.array(efit[smaName])
+	y = np.array(efit[valName])
+	y_err = np.array(efit[valErrName])
+	if flipPA is not None:
+		if flipPA >= 0:
+			makeNeg = y >= flipPA
+			y[makeNeg] = y[makeNeg] - 180.0
+		else:
+			makePos = y <= np.abs(flipPA)
+			y[makePos] = y[makePos] + 180.0
+	if xlog is True:
+		# make x-axis tick marks larger
+		ax.tick_params(axis="x", which="major", length=10)
+		ax.tick_params(axis="x", which="minor", length=5)
+	if xlog is True and ylog is False:
+		ax.semilogx(a, y, color=plotColor, lw=lw)
+	elif xlog is False and ylog is True:
+		ax.semilogy(a, y, color=plotColor, lw=lw)
+	elif xlog is True and ylog is True:
+		ax.loglog(a, y, color=plotColor, lw=lw)
+	else:
+		ax.plot(a, y, color=plotColor, lw=lw)
+	if plotErrors is True:
+		ax.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
+	else:
+		ax.plot(a, y, marker='o', color=plotColor, ms=3)
+	if xmark is not None:
+		if xmarkColor is None:
+			xmarkColor = plotColor
+		if type(xmark) in [int, float]:
+			ax.axvline(xmark, ls="--", color=xmarkColor)
+		else:
+			nXmarks = len(xmark)
+			if type(xmarkColor) is not list:
+				xmarkColors = [xmarkColor]*nXmarks
+			else:
+				xmarkColors = xmarkColor
+			for i in range(len(xmark)):
+				ax.axvline(xmark[i], ls="--", color=xmarkColors[i])
+	if ymark is not None:
+		if type(ymark) in [int, float]:
+			ax.axhline(ymark, ls="--", color=ymarkColor)
+		else:
+			for y in ymark:
+				ax.axhline(y, ls="--", color=ymarkColor)
+	
+	if xlog is True:
+		MakeNiceLogAxes(whichAxis="x", axisObj=ax)
+#     valErrName = valName + errSuffix
+#     a = smaScale * np.array(efit[smaName])
+#     y = np.array(efit[valName])
+#     y_err = np.array(efit[valErrName])
+#     if flipPA is not None:
+#         if flipPA >= 0:
+#             makeNeg = y >= flipPA
+#             y[makeNeg] = y[makeNeg] - 180.0
+#         else:
+#             makePos = y <= np.abs(flipPA)
+#             y[makePos] = y[makePos] + 180.0
+#     if xlog is True:
+#         # make x-axis tick marks larger
+#         plt.tick_params(axis="x", which="major", length=10)
+#         plt.tick_params(axis="x", which="minor", length=5)
+#     if xlog is True and ylog is False:
+#         plt.semilogx(a, y, color=plotColor, lw=lw)
+#     elif xlog is False and ylog is True:
+#         plt.semilogy(a, y, color=plotColor, lw=lw)
+#     elif xlog is True and ylog is True:
+#         plt.loglog(a, y, color=plotColor, lw=lw)
+#     else:
+#         plt.plot(a, y, color=plotColor, lw=lw)
+#     if plotErrors is True:
+#         plt.errorbar(a, y, yerr=y_err, fmt="o", color=plotColor, ms=2)
+#     else:
+#         plt.plot(a, y, marker='o', color=plotColor, ms=3)
+#     if xmark is not None:
+#         if xmarkColor is None:
+#             xmarkColor = plotColor
+#         if type(xmark) in [int, float]:
+#             plt.axvline(xmark, ls="--", color=xmarkColor)
+#         else:
+#             nXmarks = len(xmark)
+#             if type(xmarkColor) is not list:
+#                 xmarkColors = [xmarkColor]*nXmarks
+#             else:
+#                 xmarkColors = xmarkColor
+#             for i in range(len(xmark)):
+#                 plt.axvline(xmark[i], ls="--", color=xmarkColors[i])
+#     if ymark is not None:
+#         if type(ymark) in [int, float]:
+#             plt.axhline(ymark, ls="--", color=ymarkColor)
+#         else:
+#             for y in ymark:
+#                 plt.axhline(y, ls="--", color=ymarkColor)
+#     
+#     if xlog is True:
+#         MakeNiceLogAxes(whichAxis="x")
 
 
 
